@@ -1,0 +1,3 @@
+
+invaders: invaders.zig
+  zig build-exe invaders.zig
