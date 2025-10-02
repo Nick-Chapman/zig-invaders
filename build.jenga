@@ -1,3 +1,13 @@
 
 invaders: invaders.zig
   zig build-exe invaders.zig
+
+actual.out: invaders invaders.e invaders.f invaders.g invaders.h
+  ./invaders > actual.out 2>&1
+
+expected.out:
+  cat ~/code/space-invaders/trace/test1.out | head -9 > expected.out
+
+diff.out: expected.out actual.out
+  git diff --word-diff=color expected.out actual.out | tee diff.out
+  #git diff --color expected.out actual.out | tee diff.out
