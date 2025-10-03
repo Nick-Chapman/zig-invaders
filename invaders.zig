@@ -3,6 +3,7 @@ const print = std.debug.print;
 const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
 //const stdout = std.io.getStdOut().writer();
+const native_endian = @import("builtin").target.cpu.arch.endian();
 
 const max_steps = 50003;
 
@@ -112,15 +113,29 @@ fn trace(state : *State) void {
 }
 
 fn hilo(a:u8, b:u8) u16 {
-    return @as(u16,a) << 8 | b;
+    //return @as(u16,a) << 8 | b;
+    switch (native_endian) {
+        .big => return @bitCast([_]u8{a,b}),
+        .little => return @bitCast([_]u8{b,a}),
+    }
 }
 
 fn lo(word: u16) u8 {
-    return @truncate(word);
+    //return @truncate(word);
+    const byte_pair : [2]u8 = @bitCast(word);
+    switch (native_endian) {
+        .big => return byte_pair[1],
+        .little => return byte_pair[0],
+    }
 }
 
 fn hi(word: u16) u8 {
-    return @truncate(word >> 8);
+    //return @truncate(word >> 8);
+    const byte_pair : [2]u8 = @bitCast(word);
+    switch (native_endian) {
+        .big => return byte_pair[0],
+        .little => return byte_pair[1],
+    }
 }
 
 fn pushStack(state: *State, byte: u8) void {
