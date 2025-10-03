@@ -4,6 +4,8 @@ const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
 //const stdout = std.io.getStdOut().writer();
 
+const max_steps = 50003;
+
 pub fn main() !void {
     //print("** Zig Invaders **\n",.{});
     var mem : [mem_size]u8 = undefined;
@@ -51,7 +53,7 @@ const Cpu = struct {
     flagZ : u1,
     //flagA : u1,
     //flagP : u1,
-    //flagY : u1,
+    flagY : u1,
     fn setDE(self:*Cpu, word : u16) void {
         self.d = hi(word);
         self.e = lo(word);
@@ -74,10 +76,12 @@ fn run(mem : []u8) void {
             .hl = 0,
             .flagS = 0,
             .flagZ = 0,
+            //.flagA = 0,
             //.flagP = 0,
+            .flagY = 0,
         },
     };
-    while (state.step < 1600) { //TODO control during dev
+    while (state.step < max_steps) { //TODO control during dev
         step(&state);
         state.step += 1;
     }
@@ -85,7 +89,7 @@ fn run(mem : []u8) void {
 
 fn trace(state : *State) void {
     const cpu = state.cpu;
-    print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??0 : ", .{
+    print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??{x} : ", .{
         state.step,
         state.cycle,
         cpu.pc,
@@ -98,7 +102,9 @@ fn trace(state : *State) void {
         cpu.sp,
         cpu.flagS,
         cpu.flagZ,
+        //cpu.flagA,
         //cpu.flagP,
+        cpu.flagY,
     });
 }
 
@@ -111,8 +117,15 @@ fn hi(word: u16) u8 {
 }
 
 fn pushStack(state: *State, byte: u8) void {
-    state.cpu.sp -= 1; // decrement before push
+    state.cpu.sp -= 1; // decrement before write
     state.mem[state.cpu.sp] = byte;
+}
+
+fn popStack(state: *State) u8 {
+    // read before increment
+    const byte = state.mem[state.cpu.sp];
+    state.cpu.sp += 1;
+    return byte;
 }
 
 fn fetch16(state : *State) u16 {
@@ -141,6 +154,15 @@ fn setFlags(cpu: *Cpu, byte: u8) void {
 //     _ = byte;
 //     return 1; // TODO: this is a hack. do it right!
 // }
+
+fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
+    if (b>a) {
+        cpu.flagY = 1;
+        return 256 + @as(u9,a) - @as(u9,b);
+    }
+    cpu.flagY = 0;
+    return @as(u9,a - b);
+}
 
 fn step(state : *State) void {
     const op : u8 = fetch(state);
@@ -176,7 +198,7 @@ fn step(state : *State) void {
         0x1A => {
             trace(state);
             print("LD   A,(DE)\n", .{});
-            const de = @as(u16,cpu.d) << 8 | cpu.e; //TODO: union
+            const de = @as(u16,cpu.d) << 8 | cpu.e;
             cpu.a = state.mem[de];
             state.cycle += 7;
         },
@@ -207,16 +229,39 @@ fn step(state : *State) void {
             cpu.sp = word;
             state.cycle += 10;
         },
+        0x36 => {
+            const byte = fetch(state);
+            trace(state);
+            print("LD   (HL),{X:0>2}\n", .{byte});
+            state.mem[cpu.hl] = byte;
+            state.cycle += 10;
+        },
         0x77 => {
             trace(state);
             print("LD   (HL),A\n", .{});
             state.mem[cpu.hl] = cpu.a;
             state.cycle += 7;
         },
+        0x7C => {
+            trace(state);
+            print("LD   A,H\n", .{});
+            cpu.a = hi(cpu.hl);
+            state.cycle += 5;
+        },
         0xC3 => {
             const word = fetch16(state);
             trace(state);
             print("JP   {X:0>4}\n", .{word});
+            cpu.pc = word;
+            state.cycle += 10;
+        },
+        0xC9 => {
+            trace(state);
+            print("RET\n", .{});
+            //cpu.pc = word;
+            const loB = popStack(state);
+            const hiB = popStack(state);
+            const word = @as(u16,hiB) << 8 | loB;
             cpu.pc = word;
             state.cycle += 10;
         },
@@ -236,9 +281,18 @@ fn step(state : *State) void {
             cpu.pc = word;
             state.cycle += 17;
         },
+        0xFE => {
+            const byte = fetch(state);
+            trace(state);
+            print("CP   {X:0>2}\n", .{byte});
+            const xres : u9 = subtract(cpu,cpu.a,byte);
+            const res : u8 = @truncate(xres);
+            setFlags(cpu,res);
+            state.cycle += 7;
+        },
         else => {
             trace(state);
-            print("**opcode: {X:0>2}\n", .{op});
+            print("**opcode: {X:0>2}\n{d:8}  STOP\n", .{op,1+state.step});
             std.process.exit(0);
         }
     }
