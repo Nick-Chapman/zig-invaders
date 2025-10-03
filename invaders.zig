@@ -58,6 +58,9 @@ const Cpu = struct {
         self.d = hi(word);
         self.e = lo(word);
     }
+    fn DE(self:*Cpu) u16 {
+        return hilo(self.d,self.e);
+    }
 };
 
 fn run(mem : []u8) void {
@@ -108,6 +111,10 @@ fn trace(state : *State) void {
     });
 }
 
+fn hilo(a:u8, b:u8) u16 {
+    return @as(u16,a) << 8 | b;
+}
+
 fn lo(word: u16) u8 {
     return @truncate(word);
 }
@@ -129,9 +136,9 @@ fn popStack(state: *State) u8 {
 }
 
 fn fetch16(state : *State) u16 {
-    const loB = fetch(state);
-    const hiB = fetch(state);
-    return @as(u16,hiB) << 8 | loB;
+    const b = fetch(state);
+    const a = fetch(state);
+    return hilo(a,b);
 }
 
 fn fetch(state : *State) u8 {
@@ -188,6 +195,13 @@ fn step(state : *State) void {
             cpu.b = byte;
             state.cycle += 7;
         },
+        0x0E => {
+            const byte = fetch(state);
+            trace(state);
+            print("LD   C,{X:0>2}\n", .{byte});
+            cpu.c = byte;
+            state.cycle += 7;
+        },
         0x11 => {
             const word = fetch16(state);
             trace(state);
@@ -198,8 +212,7 @@ fn step(state : *State) void {
         0x1A => {
             trace(state);
             print("LD   A,(DE)\n", .{});
-            const de = @as(u16,cpu.d) << 8 | cpu.e;
-            cpu.a = state.mem[de];
+            cpu.a = state.mem[cpu.DE()];
             state.cycle += 7;
         },
         0x21 => {
@@ -215,11 +228,17 @@ fn step(state : *State) void {
             cpu.hl += 1;
             state.cycle += 5;
         },
+        0x26 => {
+            const byte = fetch(state);
+            trace(state);
+            print("LD   H,{X:0>2}\n", .{byte});
+            cpu.hl = hilo(byte,lo(cpu.hl));
+            state.cycle += 7;
+        },
         0x13 => {
             trace(state);
             print("INC  DE\n", .{});
-            const de = (@as(u16,cpu.d) << 8 | cpu.e);
-            cpu.setDE(1+de);
+            cpu.setDE(1 + cpu.DE());
             state.cycle += 5;
         },
         0x31 => {
@@ -235,6 +254,12 @@ fn step(state : *State) void {
             print("LD   (HL),{X:0>2}\n", .{byte});
             state.mem[cpu.hl] = byte;
             state.cycle += 10;
+        },
+        0x6F => {
+            trace(state);
+            print("LD   L,A\n", .{});
+            cpu.hl = hilo(hi(cpu.hl),cpu.a);
+            state.cycle += 5;
         },
         0x77 => {
             trace(state);
@@ -259,9 +284,9 @@ fn step(state : *State) void {
             trace(state);
             print("RET\n", .{});
             //cpu.pc = word;
-            const loB = popStack(state);
-            const hiB = popStack(state);
-            const word = @as(u16,hiB) << 8 | loB;
+            const b = popStack(state);
+            const a = popStack(state);
+            const word = hilo(a,b);
             cpu.pc = word;
             state.cycle += 10;
         },
@@ -281,6 +306,20 @@ fn step(state : *State) void {
             cpu.pc = word;
             state.cycle += 17;
         },
+        0xD5 => {
+            trace(state);
+            print("PUSH DE\n", .{});
+            pushStack(state,cpu.d);
+            pushStack(state,cpu.e);
+            state.cycle += 11;
+        },
+        0xE5 => {
+            trace(state);
+            print("PUSH HL\n", .{});
+            pushStack(state,hi(cpu.hl));
+            pushStack(state,lo(cpu.hl));
+            state.cycle += 11;
+        },
         0xFE => {
             const byte = fetch(state);
             trace(state);
@@ -292,7 +331,7 @@ fn step(state : *State) void {
         },
         else => {
             trace(state);
-            print("**opcode: {X:0>2}\n{d:8}  STOP\n", .{op,1+state.step});
+            print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
             std.process.exit(0);
         }
     }
