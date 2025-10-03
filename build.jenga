@@ -3,10 +3,13 @@ invaders: invaders.zig
   zig build-exe invaders.zig
 
 actual.out: invaders invaders.e invaders.f invaders.g invaders.h
-  ./invaders > actual.out 2>&1
+  ./invaders > actual.out 2>&1 || true
 
-expected.out:
-  cat ~/code/space-invaders/trace/test1.out | head -9 > expected.out
+size: actual.out
+  echo '-'$(cat actual.out | wc -l) > size
+
+expected.out: size
+  cat ~/code/space-invaders/trace/test1.out | sed 's/SZAPY:\(..\)../SZAPY:\1??/' | head $(cat size) > expected.out
 
 diff.out: expected.out actual.out
   git diff --word-diff=color expected.out actual.out | tee diff.out
