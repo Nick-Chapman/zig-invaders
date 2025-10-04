@@ -5,14 +5,33 @@ const mem_size = 16 * 1024;
 //const stdout = std.io.getStdOut().writer();
 const native_endian = @import("builtin").target.cpu.arch.endian();
 
-const max_steps = 42250; //50003;
-
 pub fn main() !void {
     //print("** Zig Invaders **\n",.{});
     var mem : [mem_size]u8 = undefined;
     try load_roms(&mem);
     //dump_mem(&mem);
-    run(&mem);
+
+    var state : State = State {
+        .step = 0,
+        .cycle = 0,
+        .mem = &mem,
+        .cpu = Cpu {
+            .pc = 0,
+            .sp = 0,
+            .a = 0,
+            .b = 0,
+            .c = 0,
+            .d = 0,
+            .e = 0,
+            .hl = 0,
+            .flagS = 0,
+            .flagZ = 0,
+            //.flagA = 0,
+            //.flagP = 0,
+            .flagY = 0,
+        },
+    };
+    emulation_main_loop(&state);
 }
 
 fn load_roms(mem : []u8) !void {
@@ -70,42 +89,15 @@ const Cpu = struct {
         return hilo(self.d,self.e);
     }
     fn flags(self:*Cpu) u8 {
-        _ = self;
-        return 0xff; //TODO
+        //TODO other flags
+        return if (self.flagZ == 1) 0x40 else 0;
     }
     fn setFlags(self:*Cpu, byte: u8) void {
-        _ = self;
-        _ = byte;
-        //TODO
+        self.flagZ = if (byte & 0x40 == 0) 0 else 1;
+        //TODO other flags
     }
 };
 
-fn run(mem : []u8) void {
-    var state : State = State {
-        .step = 0,
-        .cycle = 0,
-        .mem = mem,
-        .cpu = Cpu {
-            .pc = 0,
-            .sp = 0,
-            .a = 0,
-            .b = 0,
-            .c = 0,
-            .d = 0,
-            .e = 0,
-            .hl = 0,
-            .flagS = 0,
-            .flagZ = 0,
-            //.flagA = 0,
-            //.flagP = 0,
-            .flagY = 0,
-        },
-    };
-    while (state.step < max_steps) { //control during dev
-        step(&state);
-        state.step += 1;
-    }
-}
 
 fn trace(state : *State) void {
     const cpu = state.cpu;
@@ -203,14 +195,34 @@ fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
 }
 
 fn doOut(state: *State, channel: u8, value : u8) void {
+    //TODO
     _ = state;
     //print("**doOut: channel={X:0>2} value={X:0>2}\n", .{channel,value});
     _ = channel;
     _ = value;
 }
 
-fn step(state : *State) void {
-    const op : u8 = fetch(state);
+const max_steps = 50000; //44100;
+
+fn emulation_main_loop(state : *State) void {
+    while (state.step < max_steps) { //control during dev
+        // TODO: only fire when interrupts are enabled
+        // TODO: fire periodically. what's t he period?
+
+        if (state.step == 42246) {
+            step(state,0xCF);
+        } else if (state.step == 44098) {
+            step(state,0xD7);
+        } else {
+            const op = fetch(state);
+            step(state,op);
+        }
+
+        state.step += 1;
+    }
+}
+
+fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
@@ -468,6 +480,13 @@ fn step(state : *State) void {
             cpu.pc = hilo(a,b);
             state.cycle += 10;
         },
+        0xCA => {
+            const word = fetch16(state);
+            trace(state);
+            print("JP   Z,{X:0>4}\n", .{word});
+            //TODO: do the conditional jump
+            state.cycle += 10;
+        },
         0xCD => {
             const word = fetch16(state);
             trace(state);
@@ -477,11 +496,26 @@ fn step(state : *State) void {
             cpu.pc = word;
             state.cycle += 17;
         },
+        0xCF => {
+            trace(state);
+            print("RST 1\n", .{});
+            pushStack(state,hi(cpu.pc)); // hi then lo
+            pushStack(state,lo(cpu.pc));
+            cpu.pc = 0x08;
+            state.cycle += 4;
+        },
         0xD1 => {
             trace(state);
             print("POP  DE\n", .{});
             cpu.e = popStack(state);
             cpu.d = popStack(state);
+            state.cycle += 10;
+        },
+        0xD2 => {
+            const word = fetch16(state);
+            trace(state);
+            print("JP   NC,{X:0>4}\n", .{word});
+            if (cpu.flagY == 0) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xD3 => {
@@ -497,6 +531,14 @@ fn step(state : *State) void {
             pushStack(state,cpu.d);
             pushStack(state,cpu.e);
             state.cycle += 11;
+        },
+        0xD7 => {
+            trace(state);
+            print("RST 2\n", .{});
+            pushStack(state,hi(cpu.pc)); // hi then lo
+            pushStack(state,lo(cpu.pc));
+            cpu.pc = 0x10;
+            state.cycle += 4;
         },
         0xE1 => {
             trace(state);
