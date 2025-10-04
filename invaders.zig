@@ -5,7 +5,7 @@ const mem_size = 16 * 1024;
 //const stdout = std.io.getStdOut().writer();
 const native_endian = @import("builtin").target.cpu.arch.endian();
 
-const max_steps = 50003;
+const max_steps = 42250; //50003;
 
 pub fn main() !void {
     //print("** Zig Invaders **\n",.{});
@@ -69,6 +69,15 @@ const Cpu = struct {
     fn DE(self:*Cpu) u16 {
         return hilo(self.d,self.e);
     }
+    fn flags(self:*Cpu) u8 {
+        _ = self;
+        return 0xff; //TODO
+    }
+    fn setFlags(self:*Cpu, byte: u8) void {
+        _ = self;
+        _ = byte;
+        //TODO
+    }
 };
 
 fn run(mem : []u8) void {
@@ -92,7 +101,7 @@ fn run(mem : []u8) void {
             .flagY = 0,
         },
     };
-    while (state.step < max_steps) { //TODO control during dev
+    while (state.step < max_steps) { //control during dev
         step(&state);
         state.step += 1;
     }
@@ -246,6 +255,12 @@ fn step(state : *State) void {
             cpu.c = byte;
             state.cycle += 7;
         },
+        0x0F => {
+            trace(state);
+            print("RRCA\n", .{});
+            //TODO
+            state.cycle += 4;
+        },
         0x11 => {
             const word = fetch16(state);
             trace(state);
@@ -310,12 +325,33 @@ fn step(state : *State) void {
             cpu.sp = word;
             state.cycle += 10;
         },
+        0x32 => {
+            const word = fetch16(state);
+            trace(state);
+            print("LD   ({X:0>4}),A\n", .{word});
+            state.mem[word] = cpu.a;
+            state.cycle += 13;
+        },
         0x36 => {
             const byte = fetch(state);
             trace(state);
             print("LD   (HL),{X:0>2}\n", .{byte});
             state.mem[cpu.hl] = byte;
             state.cycle += 10;
+        },
+        0x3A => {
+            const word = fetch16(state);
+            trace(state);
+            print("LD   A,({X:0>4})\n", .{word});
+            cpu.a = state.mem[word];
+            state.cycle += 13;
+        },
+        0x3E => {
+            const byte = fetch(state);
+            trace(state);
+            print("LD   A,{X:0>2}\n", .{byte});
+            cpu.a = byte;
+            state.cycle += 7;
         },
         0x56 => {
             trace(state);
@@ -353,6 +389,12 @@ fn step(state : *State) void {
             cpu.a = cpu.d;
             state.cycle += 5;
         },
+        0x7B => {
+            trace(state);
+            print("LD   A,E\n", .{});
+            cpu.a = cpu.e;
+            state.cycle += 5;
+        },
         0x7C => {
             trace(state);
             print("LD   A,H\n", .{});
@@ -364,6 +406,22 @@ fn step(state : *State) void {
             print("LD   A,(HL)\n", .{});
             cpu.a = state.mem[cpu.hl];
             state.cycle += 7;
+        },
+        0xA7 => {
+            trace(state);
+            print("AND  A\n", .{});
+            const res = cpu.a & cpu.a;
+            cpu.a = res;
+            setFlags(cpu,res);
+            state.cycle += 4;
+        },
+        0xAF => {
+            trace(state);
+            print("XOR  A\n", .{});
+            const res = cpu.a ^ cpu.a; //xor in zig?
+            cpu.a = res;
+            setFlags(cpu,res);
+            state.cycle += 4;
         },
         0xC1 => {
             trace(state);
@@ -392,6 +450,15 @@ fn step(state : *State) void {
             pushStack(state,cpu.b);
             pushStack(state,cpu.c);
             state.cycle += 11;
+        },
+        0xC6 => {
+            const byte = fetch(state);
+            trace(state);
+            print("ADD  {X:0>2}\n", .{byte});
+            const res = cpu.a + byte; //TODO carry
+            setFlags(cpu,res);
+            cpu.a = res;
+            state.cycle += 7;
         },
         0xC9 => {
             trace(state);
@@ -446,12 +513,39 @@ fn step(state : *State) void {
             pushStack(state,lo(cpu.hl));
             state.cycle += 11;
         },
+        0xE6 => {
+            const byte = fetch(state);
+            trace(state);
+            print("AND  {X:0>2}\n", .{byte});
+            //TODO
+            state.cycle += 7;
+        },
         0xEB => {
             trace(state);
             print("EX   DE,HL\n", .{});
             const de = cpu.DE();
             cpu.setDE(cpu.hl);
             cpu.hl = de;
+            state.cycle += 4;
+        },
+        0xF1 => {
+            trace(state);
+            print("POP  PSW\n", .{});
+            cpu.setFlags(popStack(state));
+            cpu.a = popStack(state);
+            state.cycle += 10;
+        },
+        0xF5 => {
+            trace(state);
+            print("PUSH PSW\n", .{});
+            pushStack(state,cpu.a);
+            pushStack(state,cpu.flags());
+            state.cycle += 11;
+        },
+        0xFB => {
+            trace(state);
+            print("EI\n", .{});
+            //TODO: enable interrupts
             state.cycle += 4;
         },
         0xFE => {
