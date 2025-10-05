@@ -9,7 +9,8 @@ const mem_size = 16 * 1024;
 pub fn main() !void {
     const config = parse_config();
     //print("** Zig Invaders ** {any}\n",.{config});
-    var mem : [mem_size]u8 = undefined;
+    //var mem : [mem_size]u8 = undefined;
+    var mem = [_]u8{0} ** mem_size;
     try load_roms(&mem);
     var state = init_state(config,&mem);
     emulation_main_loop(&state);
@@ -48,6 +49,7 @@ fn load_roms(mem : []u8) !void {
 const Mode = enum {
     test1,
     test2,
+    dev,
 };
 
 const Config = struct {
@@ -63,13 +65,18 @@ fn parse_config() Config {
     const mode = std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
     return switch (mode) {
         .test1 => Config {
-            .max_steps = 50000,
+            .max_steps = 50_000,
             .trace_every = 1,
             .trace_pixs = false,
         },
         .test2 => Config {
-            .max_steps = 30000, //TODO: from 40000 pix is wrong!
-            .trace_every = 10000,
+            .max_steps = 270_000,
+            .trace_every = 10_000,
+            .trace_pixs = true,
+        },
+        .dev => Config {
+            .max_steps = 1_000_000,
+            .trace_every = 10_000,
             .trace_pixs = true,
         },
     };
@@ -163,12 +170,33 @@ fn printTraceLine(state: *State) void {
     });
 }
 
+fn count_bits(byte: u8) u8 {
+    var res : u8 = 0;
+    res += (if (byte & (1<<0) == 0) 0 else 1);
+    res += (if (byte & (1<<1) == 0) 0 else 1);
+    res += (if (byte & (1<<2) == 0) 0 else 1);
+    res += (if (byte & (1<<3) == 0) 0 else 1);
+    res += (if (byte & (1<<4) == 0) 0 else 1);
+    res += (if (byte & (1<<5) == 0) 0 else 1);
+    res += (if (byte & (1<<6) == 0) 0 else 1);
+    res += (if (byte & (1<<7) == 0) 0 else 1);
+    return res;
+}
+
+fn count_on_pixels(mem: []u8) u64 {
+    var res: u64 = 0;
+    for (0x2400..0x4000) |i| { //video ram
+        res += count_bits(mem[i]);
+    }
+    return res;
+}
+
 fn traceOp(state: *State, comptime fmt: []const u8, args: anytype) void {
     if (state.step % state.config.trace_every == 0) {
         printTraceLine(state);
         print(fmt,args);
         if (state.config.trace_pixs) {
-            print(" #pixs:0\n",.{});
+            print(" #pixs:{d}\n",.{count_on_pixels(state.mem)});
         } else {
             print("\n",.{});
         }
