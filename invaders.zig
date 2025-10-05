@@ -1,17 +1,41 @@
 const std = @import("std");
-const print = std.debug.print;
+const debug = std.debug;
+const print = debug.print;
+const native_endian = @import("builtin").target.cpu.arch.endian();
+const os = std.os;
 const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
-//const stdout = std.io.getStdOut().writer();
-const native_endian = @import("builtin").target.cpu.arch.endian();
+
+const max_steps = 50000;
 
 pub fn main() !void {
+
+    const n_args = os.argv.len - 1;
+    if (n_args != 1) @panic("need exactly one arg");
+    const mode = try std.fmt.parseInt(u32, std.mem.span(os.argv[1]), 10);
+
+    const trace_every : u64 =
+        switch (mode) {
+            1 => 1,
+            2 => 10000,
+            else => unreachable,
+    };
+
+    const trace_pixs : bool =
+        switch (mode) {
+            1 => false,
+            2 => true,
+            else => unreachable,
+    };
+
     //print("** Zig Invaders **\n",.{});
     var mem : [mem_size]u8 = undefined;
     try load_roms(&mem);
     //dump_mem(&mem);
 
     var state : State = State {
+        .trace_every = trace_every,
+        .trace_pixs = trace_pixs,
         .step = 0,
         .cycle = 0,
         .mem = &mem,
@@ -37,6 +61,18 @@ pub fn main() !void {
     emulation_main_loop(&state);
 }
 
+const State = struct {
+    trace_every : u64,
+    trace_pixs : bool,
+    step : u64,
+    cycle : u64,
+    mem : []u8,
+    cpu : Cpu,
+    interrupts_enabled : bool,
+    next_wakeup : u64,
+    next_interrupt_op : u8,
+};
+
 fn load_roms(mem : []u8) !void {
     const dir = std.fs.cwd();
     _ = try dir.readFile("invaders.h", mem[0..]);
@@ -55,16 +91,6 @@ fn dump_mem(mem : []u8) void {
         print("\n",.{});
     }
 }
-
-const State = struct {
-    step : u64,
-    cycle : u64,
-    mem : []u8,
-    cpu : Cpu,
-    interrupts_enabled : bool,
-    next_wakeup : u64,
-    next_interrupt_op : u8,
-};
 
 const Cpu = struct {
     pc : u16,
@@ -104,8 +130,7 @@ const Cpu = struct {
     }
 };
 
-
-fn trace(state : *State) void {
+fn printTraceLine(state: *State) void {
     const cpu = state.cpu;
     print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??{x} : ", .{
         state.step,
@@ -124,6 +149,18 @@ fn trace(state : *State) void {
         //cpu.flagP,
         cpu.flagY,
     });
+}
+
+fn traceOp(state: *State, comptime fmt: []const u8, args: anytype) void {
+    if (state.step % state.trace_every == 0) {
+        printTraceLine(state);
+        print(fmt,args);
+        if (state.trace_pixs) {
+            print(" #pixs:0\n",.{});
+        } else {
+            print("\n",.{});
+        }
+    }
 }
 
 fn hilo(a:u8, b:u8) u16 {
@@ -158,9 +195,8 @@ fn pushStack(state: *State, byte: u8) void {
 }
 
 fn popStack(state: *State) u8 {
-    // read before increment
     const byte = state.mem[state.cpu.sp];
-    state.cpu.sp += 1;
+    state.cpu.sp += 1; // increment after reead
     return byte;
 }
 
@@ -229,8 +265,6 @@ fn doIn(state: *State, channel: u8) u8 {
     }
 }
 
-const max_steps = 50000;
-
 fn emulation_main_loop(state : *State) void {
     while (state.step <= max_steps) { //control during dev
 
@@ -258,20 +292,17 @@ fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
-            trace(state);
-            print("NOP\n",.{});
+            traceOp(state, "NOP",.{});
             state.cycle += 4;
         },
         0x01 => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   BC,{X:0>4}\n", .{word});
+            traceOp(state, "LD   BC,{X:0>4}", .{word});
             cpu.setBC(word);
             state.cycle += 10;
         },
         0x05 => {
-            trace(state);
-            print("DEC  B\n", .{});
+            traceOp(state, "DEC  B", .{});
             const byte = decrement(cpu.b);
             cpu.b = byte;
             setFlags(cpu,byte);
@@ -279,14 +310,12 @@ fn step(state : *State, op:u8) void {
         },
         0x06 => {
             const byte = fetch(state);
-            trace(state);
-            print("LD   B,{X:0>2}\n", .{byte});
+            traceOp(state, "LD   B,{X:0>2}", .{byte});
             cpu.b = byte;
             state.cycle += 7;
         },
         0x0D => {
-            trace(state);
-            print("DEC  C\n", .{});
+            traceOp(state, "DEC  C", .{});
             const byte = decrement(cpu.c);
             cpu.c = byte;
             setFlags(cpu,byte);
@@ -294,14 +323,12 @@ fn step(state : *State, op:u8) void {
         },
         0x0E => {
             const byte = fetch(state);
-            trace(state);
-            print("LD   C,{X:0>2}\n", .{byte});
+            traceOp(state, "LD   C,{X:0>2}", .{byte});
             cpu.c = byte;
             state.cycle += 7;
         },
         0x0F => {
-            trace(state);
-            print("RRCA\n", .{});
+            traceOp(state, "RRCA", .{});
             const shunted : bool = cpu.a & 1 == 1;
             cpu.a = if (shunted) cpu.a >> 1 | 0x80 else cpu.a >> 1;
             if (shunted) cpu.flagY = 1;
@@ -309,78 +336,66 @@ fn step(state : *State, op:u8) void {
         },
         0x11 => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   DE,{X:0>4}\n", .{word});
+            traceOp(state, "LD   DE,{X:0>4}", .{word});
             cpu.setDE(word);
             state.cycle += 10;
         },
         0x13 => {
-            trace(state);
-            print("INC  DE\n", .{});
+            traceOp(state, "INC  DE", .{});
             cpu.setDE(1 + cpu.DE());
             state.cycle += 5;
         },
         0x09 => {
-            trace(state);
-            print("ADD  HL,BC\n", .{});
+            traceOp(state, "ADD  HL,BC", .{});
             cpu.hl = cpu.hl + cpu.BC();
             state.cycle += 10;
         },
         0x19 => {
-            trace(state);
-            print("ADD  HL,DE\n", .{});
+            traceOp(state, "ADD  HL,DE", .{});
             cpu.hl = cpu.hl + cpu.DE();
             state.cycle += 10;
         },
         0x1A => {
-            trace(state);
-            print("LD   A,(DE)\n", .{});
+            traceOp(state, "LD   A,(DE)", .{});
             cpu.a = state.mem[cpu.DE()];
             state.cycle += 7;
         },
         0x21 => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   HL,{X:0>4}\n", .{word});
+            traceOp(state, "LD   HL,{X:0>4}", .{word});
             cpu.hl = word;
             state.cycle += 10;
         },
         0x23 => {
-            trace(state);
-            print("INC  HL\n", .{});
+            traceOp(state, "INC  HL", .{});
             cpu.hl += 1;
             state.cycle += 5;
         },
         0x26 => {
             const byte = fetch(state);
-            trace(state);
-            print("LD   H,{X:0>2}\n", .{byte});
+            traceOp(state, "LD   H,{X:0>2}", .{byte});
             cpu.hl = hilo(byte,lo(cpu.hl));
             state.cycle += 7;
         },
         0x29 => {
-            trace(state);
-            print("ADD  HL,HL\n", .{});
+            traceOp(state, "ADD  HL,HL", .{});
             cpu.hl <<= 1;
             state.cycle += 10;
         },
         0x31 => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   SP,{X:0>4}\n", .{word});
+            traceOp(state, "LD   SP,{X:0>4}", .{word});
             cpu.sp = word;
             state.cycle += 10;
         },
         0x32 => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   ({X:0>4}),A\n", .{word});
+            traceOp(state, "LD   ({X:0>4}),A", .{word});
             state.mem[word] = cpu.a;
             state.cycle += 13;
         },
         0x35 => {
-            trace(state);
-            print("DEC  (HL)\n", .{});
+            traceOp(state, "DEC  (HL)", .{});
             const byte = decrement(state.mem[cpu.hl]);
             state.mem[cpu.hl] = byte;
             setFlags(cpu,byte);
@@ -388,82 +403,69 @@ fn step(state : *State, op:u8) void {
         },
         0x36 => {
             const byte = fetch(state);
-            trace(state);
-            print("LD   (HL),{X:0>2}\n", .{byte});
+            traceOp(state, "LD   (HL),{X:0>2}", .{byte});
             state.mem[cpu.hl] = byte;
             state.cycle += 10;
         },
         0x3A => {
             const word = fetch16(state);
-            trace(state);
-            print("LD   A,({X:0>4})\n", .{word});
+            traceOp(state, "LD   A,({X:0>4})", .{word});
             cpu.a = state.mem[word];
             state.cycle += 13;
         },
         0x3E => {
             const byte = fetch(state);
-            trace(state);
-            print("LD   A,{X:0>2}\n", .{byte});
+            traceOp(state, "LD   A,{X:0>2}", .{byte});
             cpu.a = byte;
             state.cycle += 7;
         },
         0x56 => {
-            trace(state);
-            print("LD   D,(HL)\n", .{});
+            traceOp(state, "LD   D,(HL)", .{});
             cpu.d = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x5E => {
-            trace(state);
-            print("LD   E,(HL)\n", .{});
+            traceOp(state, "LD   E,(HL)", .{});
             cpu.e = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x66 => {
-            trace(state);
-            print("LD   H,(HL)\n", .{});
+            traceOp(state, "LD   H,(HL)", .{});
             cpu.hl = hilo(state.mem[cpu.hl],lo(cpu.hl));
             state.cycle += 7;
         },
         0x6F => {
-            trace(state);
-            print("LD   L,A\n", .{});
+            traceOp(state, "LD   L,A", .{});
             cpu.hl = hilo(hi(cpu.hl),cpu.a);
             state.cycle += 5;
         },
         0x77 => {
-            trace(state);
-            print("LD   (HL),A\n", .{});
+            traceOp(state, "LD   (HL),A", .{});
             state.mem[cpu.hl] = cpu.a;
             state.cycle += 7;
         },
         0x7A => {
-            trace(state);
-            print("LD   A,D\n", .{});
+            traceOp(state, "LD   A,D", .{});
             cpu.a = cpu.d;
             state.cycle += 5;
         },
         0x7B => {
-            trace(state);
-            print("LD   A,E\n", .{});
+            traceOp(state, "LD   A,E", .{});
             cpu.a = cpu.e;
             state.cycle += 5;
         },
         0x7C => {
-            trace(state);
-            print("LD   A,H\n", .{});
+            traceOp(state, "LD   A,H", .{});
             cpu.a = hi(cpu.hl);
             state.cycle += 5;
         },
         0x7E => {
-            trace(state);
-            print("LD   A,(HL)\n", .{});
+            traceOp(state, "LD   A,(HL)", .{});
             cpu.a = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0xA7 => {
-            trace(state);
-            print("AND  A\n", .{});
+            traceOp(state, "AND  A", .{});
             const res = cpu.a & cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
@@ -471,53 +473,46 @@ fn step(state : *State, op:u8) void {
             state.cycle += 4;
         },
         0xAF => {
-            trace(state);
-            print("XOR  A\n", .{});
+            traceOp(state, "XOR  A", .{});
             const res = cpu.a ^ cpu.a; //xor in zig?
             cpu.a = res;
             setFlags(cpu,res);
             state.cycle += 4;
         },
         0xC1 => {
-            trace(state);
-            print("POP  BC\n", .{});
+            traceOp(state, "POP  BC", .{});
             cpu.c = popStack(state);
             cpu.b = popStack(state);
             state.cycle += 10;
         },
         0xC2 => {
             const word = fetch16(state);
-            trace(state);
-            print("JP   NZ,{X:0>4}\n", .{word});
+            traceOp(state, "JP   NZ,{X:0>4}", .{word});
             state.cycle += 10;
             if (cpu.flagZ == 0) { cpu.pc = word; }
         },
         0xC3 => {
             const word = fetch16(state);
-            trace(state);
-            print("JP   {X:0>4}\n", .{word});
+            traceOp(state, "JP   {X:0>4}", .{word});
             cpu.pc = word;
             state.cycle += 10;
         },
         0xC5 => {
-            trace(state);
-            print("PUSH BC\n", .{});
+            traceOp(state, "PUSH BC", .{});
             pushStack(state,cpu.b);
             pushStack(state,cpu.c);
             state.cycle += 11;
         },
         0xC6 => {
             const byte = fetch(state);
-            trace(state);
-            print("ADD  {X:0>2}\n", .{byte});
+            traceOp(state, "ADD  {X:0>2}", .{byte});
             const res = cpu.a + byte; //TODO carry
             setFlags(cpu,res);
             cpu.a = res;
             state.cycle += 7;
         },
         0xC8 => {
-            trace(state);
-            print("RET  Z\n", .{});
+            traceOp(state, "RET  Z", .{});
             if (cpu.flagZ == 1) {
                 const b = popStack(state);
                 const a = popStack(state);
@@ -526,8 +521,7 @@ fn step(state : *State, op:u8) void {
             state.cycle += 11;
         },
         0xC9 => {
-            trace(state);
-            print("RET\n", .{});
+            traceOp(state, "RET", .{});
             const b = popStack(state);
             const a = popStack(state);
             cpu.pc = hilo(a,b);
@@ -535,8 +529,7 @@ fn step(state : *State, op:u8) void {
         },
         0xCA => {
             const word = fetch16(state);
-            trace(state);
-            print("JP   Z,{X:0>4}\n", .{word});
+            traceOp(state, "JP   Z,{X:0>4}", .{word});
             if (cpu.flagZ == 1) {
                 //TODO: do the conditional jump
                 unreachable;
@@ -545,52 +538,45 @@ fn step(state : *State, op:u8) void {
         },
         0xCD => {
             const word = fetch16(state);
-            trace(state);
-            print("CALL {X:0>4}\n", .{word});
+            traceOp(state, "CALL {X:0>4}", .{word});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = word;
             state.cycle += 17;
         },
         0xCF => {
-            trace(state);
-            print("RST  1\n", .{});
+            traceOp(state, "RST  1", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x08;
             state.cycle += 4;
         },
         0xD1 => {
-            trace(state);
-            print("POP  DE\n", .{});
+            traceOp(state, "POP  DE", .{});
             cpu.e = popStack(state);
             cpu.d = popStack(state);
             state.cycle += 10;
         },
         0xD2 => {
             const word = fetch16(state);
-            trace(state);
-            print("JP   NC,{X:0>4}\n", .{word});
+            traceOp(state, "JP   NC,{X:0>4}", .{word});
             if (cpu.flagY == 0) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xD3 => {
             const byte = fetch(state);
-            trace(state);
-            print("OUT  {X:0>2}\n", .{byte});
+            traceOp(state, "OUT  {X:0>2}", .{byte});
             doOut(state,byte,cpu.a);
             state.cycle += 10;
         },
         0xD5 => {
-            trace(state);
-            print("PUSH DE\n", .{});
+            traceOp(state, "PUSH DE", .{});
             pushStack(state,cpu.d);
             pushStack(state,cpu.e);
             state.cycle += 11;
         },
         0xD7 => {
-            trace(state);
-            print("RST  2\n", .{});
+            traceOp(state, "RST  2", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x10;
@@ -598,37 +584,32 @@ fn step(state : *State, op:u8) void {
         },
         0xDA => {
             const word = fetch16(state);
-            trace(state);
-            print("JP   CY,{X:0>4}\n", .{word});
+            traceOp(state, "JP   CY,{X:0>4}", .{word});
             state.cycle += 10;
             if (cpu.flagY == 1) { cpu.pc = word; }
         },
         0xDB => {
             const byte = fetch(state);
-            trace(state);
-            print("IN   {X:0>2}\n", .{byte});
+            traceOp(state, "IN   {X:0>2}", .{byte});
             cpu.a = doIn(state,byte);
             state.cycle += 10;
         },
         0xE1 => {
-            trace(state);
-            print("POP  HL\n", .{});
+            traceOp(state, "POP  HL", .{});
             const b = popStack(state);
             const a = popStack(state);
             cpu.hl = hilo(a,b);
             state.cycle += 10;
         },
         0xE5 => {
-            trace(state);
-            print("PUSH HL\n", .{});
+            traceOp(state, "PUSH HL", .{});
             pushStack(state,hi(cpu.hl));
             pushStack(state,lo(cpu.hl));
             state.cycle += 11;
         },
         0xE6 => {
             const byte = fetch(state);
-            trace(state);
-            print("AND  {X:0>2}\n", .{byte});
+            traceOp(state, "AND  {X:0>2}", .{byte});
             const res = cpu.a & byte;
             cpu.a = res;
             setFlags(cpu,res);
@@ -636,44 +617,39 @@ fn step(state : *State, op:u8) void {
             state.cycle += 7;
         },
         0xEB => {
-            trace(state);
-            print("EX   DE,HL\n", .{});
+            traceOp(state, "EX   DE,HL", .{});
             const de = cpu.DE();
             cpu.setDE(cpu.hl);
             cpu.hl = de;
             state.cycle += 4;
         },
         0xF1 => {
-            trace(state);
-            print("POP  PSW\n", .{});
+            traceOp(state, "POP  PSW", .{});
             cpu.restoreFlags(popStack(state));
             cpu.a = popStack(state);
             state.cycle += 10;
         },
         0xF5 => {
-            trace(state);
-            print("PUSH PSW\n", .{});
+            traceOp(state, "PUSH PSW", .{});
             pushStack(state,cpu.a);
             pushStack(state,cpu.saveFlags());
             state.cycle += 11;
         },
         0xFB => {
-            trace(state);
-            print("EI\n", .{});
+            traceOp(state, "EI", .{});
             state.interrupts_enabled = true;
             state.cycle += 4;
         },
         0xFE => {
             const byte = fetch(state);
-            trace(state);
-            print("CP   {X:0>2}\n", .{byte});
+            traceOp(state, "CP   {X:0>2}", .{byte});
             const xres : u9 = subtract(cpu,cpu.a,byte);
             const res : u8 = @truncate(xres);
             setFlags(cpu,res);
             state.cycle += 7;
         },
         else => {
-            trace(state);
+            printTraceLine(state);
             print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
             std.process.exit(0);
         }
