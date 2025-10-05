@@ -31,6 +31,8 @@ pub fn main() !void {
             .flagY = 0,
         },
         .interrupts_enabled = false,
+        .next_wakeup = half_frame_cycles,
+        .next_interrupt_op = first_interrupt_op,
     };
     emulation_main_loop(&state);
 }
@@ -60,6 +62,8 @@ const State = struct {
     mem : []u8,
     cpu : Cpu,
     interrupts_enabled : bool,
+    next_wakeup : u64,
+    next_interrupt_op : u8,
 };
 
 const Cpu = struct {
@@ -225,34 +229,30 @@ fn doIn(state: *State, channel: u8) u8 {
     }
 }
 
-const max_steps = 49650;
+const max_steps = 50000;
 
 fn emulation_main_loop(state : *State) void {
-    while (state.step < max_steps) { //control during dev
-        // TODO: only fire when interrupts are enabled
-        // TODO: fire periodically. what's the period?
+    while (state.step <= max_steps) { //control during dev
 
-        // TODO should look at cycles, not steps!
-        if (state.step == 42246) {
-            //print("cycle={d}\n",.{state.cycle});
-            step(state,0xCF);
-        } else if (state.step == 44098) {
-            //print("cycle={d}\n",.{state.cycle});
-            step(state,0xD7);
-        } else if (state.step == 45947) {
-            //print("cycle={d}\n",.{state.cycle});
-            step(state,0xCF);
-        } else if (state.step == 47799) {
-            //print("cycle={d}\n",.{state.cycle});
-            step(state,0xD7);
-        } else {
-            const op = fetch(state);
-            step(state,op);
+        if (state.cycle > state.next_wakeup) {
+            if (state.interrupts_enabled) {
+                step(state,state.next_interrupt_op);
+                state.step += 1;
+            }
+            state.next_wakeup += half_frame_cycles;
+            state.next_interrupt_op ^= flip_interrupt_op;
         }
 
+        const op = fetch(state);
+        step(state,op);
         state.step += 1;
     }
 }
+
+const half_frame_cycles = 2_000_000 / 120;
+const first_interrupt_op = 0xCF;
+const second_interrupt_op = 0xD7;
+const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
 
 fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
@@ -660,7 +660,6 @@ fn step(state : *State, op:u8) void {
         0xFB => {
             trace(state);
             print("EI\n", .{});
-            //print("EI\n",.{});
             state.interrupts_enabled = true;
             state.cycle += 4;
         },
@@ -673,18 +672,6 @@ fn step(state : *State, op:u8) void {
             setFlags(cpu,res);
             state.cycle += 7;
         },
-
-        //template...
-        0xFF => {
-            //const byte = fetch(state);
-            //const word = fetch16(state);
-            trace(state);
-            print("TODO-OP-0\n", .{});
-            //print("TODO-OP-1 {X:0>2}\n", .{byte});
-            //print("TODO-OP-2 {X:0>4}\n", .{word});
-            state.cycle += 10;
-        },
-
         else => {
             trace(state);
             print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
