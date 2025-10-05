@@ -6,72 +6,36 @@ const os = std.os;
 const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
 
-const max_steps = 50000;
-
 pub fn main() !void {
-
-    const n_args = os.argv.len - 1;
-    if (n_args != 1) @panic("need exactly one arg");
-    const mode = try std.fmt.parseInt(u32, std.mem.span(os.argv[1]), 10);
-
-    const trace_every : u64 =
-        switch (mode) {
-            1 => 1,
-            2 => 10000,
-            else => unreachable,
-    };
-
-    const trace_pixs : bool =
-        switch (mode) {
-            1 => false,
-            2 => true,
-            else => unreachable,
-    };
-
-    //print("** Zig Invaders **\n",.{});
+    const config = parse_config();
+    //print("** Zig Invaders ** {any}\n",.{config});
     var mem : [mem_size]u8 = undefined;
     try load_roms(&mem);
-    //dump_mem(&mem);
-
-    var state : State = State {
-        .trace_every = trace_every,
-        .trace_pixs = trace_pixs,
-        .step = 0,
-        .cycle = 0,
-        .mem = &mem,
-        .cpu = Cpu {
-            .pc = 0,
-            .sp = 0,
-            .a = 0,
-            .b = 0,
-            .c = 0,
-            .d = 0,
-            .e = 0,
-            .hl = 0,
-            .flagS = 0,
-            .flagZ = 0,
-            //.flagA = 0,
-            //.flagP = 0,
-            .flagY = 0,
-        },
-        .interrupts_enabled = false,
-        .next_wakeup = half_frame_cycles,
-        .next_interrupt_op = first_interrupt_op,
-    };
+    var state = init_state(config,&mem);
     emulation_main_loop(&state);
 }
 
-const State = struct {
-    trace_every : u64,
-    trace_pixs : bool,
-    step : u64,
-    cycle : u64,
-    mem : []u8,
-    cpu : Cpu,
-    interrupts_enabled : bool,
-    next_wakeup : u64,
-    next_interrupt_op : u8,
-};
+const half_frame_cycles = 2_000_000 / 120;
+const first_interrupt_op = 0xCF;
+const second_interrupt_op = 0xD7;
+const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
+
+fn emulation_main_loop(state : *State) void {
+    while (state.step <= state.config.max_steps) {
+
+        if (state.cycle > state.next_wakeup) {
+            if (state.interrupts_enabled) {
+                step(state,state.next_interrupt_op);
+                state.step += 1;
+            }
+            state.next_wakeup += half_frame_cycles;
+            state.next_interrupt_op ^= flip_interrupt_op;
+        }
+        const op = fetch(state);
+        step(state,op);
+        state.step += 1;
+    }
+}
 
 fn load_roms(mem : []u8) !void {
     const dir = std.fs.cwd();
@@ -81,30 +45,72 @@ fn load_roms(mem : []u8) !void {
     _ = try dir.readFile("invaders.e", mem[3*rom_size..]);
 }
 
-fn dump_mem(mem : []u8) void {
-    const elems_per_row = 16;
-    for (0..mem_size / elems_per_row) |row| {
-        for (0..elems_per_row) |col| {
-            const i = elems_per_row * row + col;
-            print(" {x:0>2}", .{mem[i]});
-        }
-        print("\n",.{});
-    }
+const Mode = enum {
+    test1,
+    test2,
+};
+
+const Config = struct {
+    max_steps : u64,
+    trace_every : u64,
+    trace_pixs : bool,
+};
+
+fn parse_config() Config {
+    const n_args = os.argv.len - 1;
+    if (n_args != 1) @panic("need exactly one arg");
+    const arg1 = std.mem.span(os.argv[1]);
+    const mode = std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
+    return switch (mode) {
+        .test1 => Config {
+            .max_steps = 50000,
+            .trace_every = 1,
+            .trace_pixs = false,
+        },
+        .test2 => Config {
+            .max_steps = 30000, //TODO: from 40000 pix is wrong!
+            .trace_every = 10000,
+            .trace_pixs = true,
+        },
+    };
+}
+
+const State = struct {
+    config : Config,
+    step : u64, //number of instructions executed
+    cycle : u64, //simulated cycles (at clock speed of 2 MhZ)
+    mem : []u8,
+    cpu : Cpu,
+    interrupts_enabled : bool,
+    next_wakeup : u64,
+    next_interrupt_op : u8,
+};
+
+fn init_state(config: Config, mem: []u8) State {
+    const state : State = State {
+        .config = config,
+        .step = 0,
+        .cycle = 0,
+        .mem = mem,
+        .cpu = init_cpu(),
+        .interrupts_enabled = false,
+        .next_wakeup = half_frame_cycles,
+        .next_interrupt_op = first_interrupt_op,
+    };
+    return state;
 }
 
 const Cpu = struct {
     pc : u16,
     sp : u16,
+    hl : u16,
     a : u8,
     b : u8,
     c : u8,
     d : u8,
     e : u8,
-    hl : u16,
     flagS : u1,
     flagZ : u1,
-    //flagA : u1,
-    //flagP : u1,
     flagY : u1,
     fn setBC(self:*Cpu, word : u16) void {
         self.b = hi(word);
@@ -130,6 +136,14 @@ const Cpu = struct {
     }
 };
 
+fn init_cpu() Cpu {
+    return Cpu {
+        .pc = 0, .sp = 0, .a = 0, .hl = 0,
+        .b = 0, .c = 0, .d = 0, .e = 0,
+        .flagS = 0, .flagZ = 0, .flagY = 0,
+    };
+}
+
 fn printTraceLine(state: *State) void {
     const cpu = state.cpu;
     print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??{x} : ", .{
@@ -145,17 +159,15 @@ fn printTraceLine(state: *State) void {
         cpu.sp,
         cpu.flagS,
         cpu.flagZ,
-        //cpu.flagA,
-        //cpu.flagP,
         cpu.flagY,
     });
 }
 
 fn traceOp(state: *State, comptime fmt: []const u8, args: anytype) void {
-    if (state.step % state.trace_every == 0) {
+    if (state.step % state.config.trace_every == 0) {
         printTraceLine(state);
         print(fmt,args);
-        if (state.trace_pixs) {
+        if (state.config.trace_pixs) {
             print(" #pixs:0\n",.{});
         } else {
             print("\n",.{});
@@ -164,7 +176,6 @@ fn traceOp(state: *State, comptime fmt: []const u8, args: anytype) void {
 }
 
 fn hilo(a:u8, b:u8) u16 {
-    //return @as(u16,a) << 8 | b;
     switch (native_endian) {
         .big => return @bitCast([_]u8{a,b}),
         .little => return @bitCast([_]u8{b,a}),
@@ -172,7 +183,6 @@ fn hilo(a:u8, b:u8) u16 {
 }
 
 fn lo(word: u16) u8 {
-    //return @truncate(word);
     const byte_pair : [2]u8 = @bitCast(word);
     switch (native_endian) {
         .big => return byte_pair[1],
@@ -181,7 +191,6 @@ fn lo(word: u16) u8 {
 }
 
 fn hi(word: u16) u8 {
-    //return @truncate(word >> 8);
     const byte_pair : [2]u8 = @bitCast(word);
     switch (native_endian) {
         .big => return byte_pair[0],
@@ -219,13 +228,7 @@ fn decrement(byte: u8) u8 {
 fn setFlags(cpu: *Cpu, byte: u8) void {
     cpu.flagS = if (byte & 0x80 == 0) 0 else 1;
     cpu.flagZ = if (byte == 0) 1 else 0;
-    //cpu.flagP = parity(byte);
 }
-
-// fn parity(byte: u8) u1 { //TODO: compile time compute lookup table!
-//     _ = byte;
-//     return 1; // TODO: this is a hack. do it right!
-// }
 
 fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
     if (b>a) {
@@ -264,29 +267,6 @@ fn doIn(state: *State, channel: u8) u8 {
         },
     }
 }
-
-fn emulation_main_loop(state : *State) void {
-    while (state.step <= max_steps) { //control during dev
-
-        if (state.cycle > state.next_wakeup) {
-            if (state.interrupts_enabled) {
-                step(state,state.next_interrupt_op);
-                state.step += 1;
-            }
-            state.next_wakeup += half_frame_cycles;
-            state.next_interrupt_op ^= flip_interrupt_op;
-        }
-
-        const op = fetch(state);
-        step(state,op);
-        state.step += 1;
-    }
-}
-
-const half_frame_cycles = 2_000_000 / 120;
-const first_interrupt_op = 0xCF;
-const second_interrupt_op = 0xD7;
-const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
 
 fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
@@ -474,7 +454,7 @@ fn step(state : *State, op:u8) void {
         },
         0xAF => {
             traceOp(state, "XOR  A", .{});
-            const res = cpu.a ^ cpu.a; //xor in zig?
+            const res = cpu.a ^ cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
             state.cycle += 4;
