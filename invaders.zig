@@ -30,6 +30,7 @@ pub fn main() !void {
             //.flagP = 0,
             .flagY = 0,
         },
+        .interrupts_enabled = false,
     };
     emulation_main_loop(&state);
 }
@@ -57,7 +58,8 @@ const State = struct {
     step : u64,
     cycle : u64,
     mem : []u8,
-    cpu : Cpu
+    cpu : Cpu,
+    interrupts_enabled : bool,
 };
 
 const Cpu = struct {
@@ -88,11 +90,11 @@ const Cpu = struct {
     fn DE(self:*Cpu) u16 {
         return hilo(self.d,self.e);
     }
-    fn flags(self:*Cpu) u8 {
+    fn saveFlags(self:*Cpu) u8 {
         //TODO other flags
         return if (self.flagZ == 1) 0x40 else 0;
     }
-    fn setFlags(self:*Cpu, byte: u8) void {
+    fn restoreFlags(self:*Cpu, byte: u8) void {
         self.flagZ = if (byte & 0x40 == 0) 0 else 1;
         //TODO other flags
     }
@@ -195,23 +197,53 @@ fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
 }
 
 fn doOut(state: *State, channel: u8, value : u8) void {
-    //TODO
     _ = state;
-    //print("**doOut: channel={X:0>2} value={X:0>2}\n", .{channel,value});
-    _ = channel;
-    _ = value;
+    switch (channel) {
+        0x03 => {}, //TODO sound
+        0x05 => {}, //TODO sound
+        0x06 => {}, //watchdog; ignore
+        else => {
+            print("**doOut: channel={X:0>2} value={X:0>2}\n", .{channel,value});
+            unreachable;
+        },
+    }
 }
 
-const max_steps = 50000; //44100;
+fn doIn(state: *State, channel: u8) u8 {
+    _ = state;
+    switch (channel) {
+        0x01 => {
+            return 0x01; //TODO: input controls and dip switches
+        },
+        0x02 => {
+            return 0x00; //TODO: input controls and dip switches
+        },
+        else => {
+            print("**doIn: channel={X:0>2}\n", .{channel});
+            unreachable;
+        },
+    }
+}
+
+const max_steps = 49650;
 
 fn emulation_main_loop(state : *State) void {
     while (state.step < max_steps) { //control during dev
         // TODO: only fire when interrupts are enabled
-        // TODO: fire periodically. what's t he period?
+        // TODO: fire periodically. what's the period?
 
+        // TODO should look at cycles, not steps!
         if (state.step == 42246) {
+            //print("cycle={d}\n",.{state.cycle});
             step(state,0xCF);
         } else if (state.step == 44098) {
+            //print("cycle={d}\n",.{state.cycle});
+            step(state,0xD7);
+        } else if (state.step == 45947) {
+            //print("cycle={d}\n",.{state.cycle});
+            step(state,0xCF);
+        } else if (state.step == 47799) {
+            //print("cycle={d}\n",.{state.cycle});
             step(state,0xD7);
         } else {
             const op = fetch(state);
@@ -270,7 +302,9 @@ fn step(state : *State, op:u8) void {
         0x0F => {
             trace(state);
             print("RRCA\n", .{});
-            //TODO
+            const shunted : bool = cpu.a & 1 == 1;
+            cpu.a = if (shunted) cpu.a >> 1 | 0x80 else cpu.a >> 1;
+            if (shunted) cpu.flagY = 1;
             state.cycle += 4;
         },
         0x11 => {
@@ -343,6 +377,14 @@ fn step(state : *State, op:u8) void {
             print("LD   ({X:0>4}),A\n", .{word});
             state.mem[word] = cpu.a;
             state.cycle += 13;
+        },
+        0x35 => {
+            trace(state);
+            print("DEC  (HL)\n", .{});
+            const byte = decrement(state.mem[cpu.hl]);
+            state.mem[cpu.hl] = byte;
+            setFlags(cpu,byte);
+            state.cycle += 10;
         },
         0x36 => {
             const byte = fetch(state);
@@ -425,6 +467,7 @@ fn step(state : *State, op:u8) void {
             const res = cpu.a & cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
+            cpu.flagY = 0;
             state.cycle += 4;
         },
         0xAF => {
@@ -472,6 +515,16 @@ fn step(state : *State, op:u8) void {
             cpu.a = res;
             state.cycle += 7;
         },
+        0xC8 => {
+            trace(state);
+            print("RET  Z\n", .{});
+            if (cpu.flagZ == 1) {
+                const b = popStack(state);
+                const a = popStack(state);
+                cpu.pc = hilo(a,b);
+            }
+            state.cycle += 11;
+        },
         0xC9 => {
             trace(state);
             print("RET\n", .{});
@@ -484,7 +537,10 @@ fn step(state : *State, op:u8) void {
             const word = fetch16(state);
             trace(state);
             print("JP   Z,{X:0>4}\n", .{word});
-            //TODO: do the conditional jump
+            if (cpu.flagZ == 1) {
+                //TODO: do the conditional jump
+                unreachable;
+            }
             state.cycle += 10;
         },
         0xCD => {
@@ -498,7 +554,7 @@ fn step(state : *State, op:u8) void {
         },
         0xCF => {
             trace(state);
-            print("RST 1\n", .{});
+            print("RST  1\n", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x08;
@@ -534,11 +590,25 @@ fn step(state : *State, op:u8) void {
         },
         0xD7 => {
             trace(state);
-            print("RST 2\n", .{});
+            print("RST  2\n", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x10;
             state.cycle += 4;
+        },
+        0xDA => {
+            const word = fetch16(state);
+            trace(state);
+            print("JP   CY,{X:0>4}\n", .{word});
+            state.cycle += 10;
+            if (cpu.flagY == 1) { cpu.pc = word; }
+        },
+        0xDB => {
+            const byte = fetch(state);
+            trace(state);
+            print("IN   {X:0>2}\n", .{byte});
+            cpu.a = doIn(state,byte);
+            state.cycle += 10;
         },
         0xE1 => {
             trace(state);
@@ -559,7 +629,10 @@ fn step(state : *State, op:u8) void {
             const byte = fetch(state);
             trace(state);
             print("AND  {X:0>2}\n", .{byte});
-            //TODO
+            const res = cpu.a & byte;
+            cpu.a = res;
+            setFlags(cpu,res);
+            cpu.flagY = 0;
             state.cycle += 7;
         },
         0xEB => {
@@ -573,7 +646,7 @@ fn step(state : *State, op:u8) void {
         0xF1 => {
             trace(state);
             print("POP  PSW\n", .{});
-            cpu.setFlags(popStack(state));
+            cpu.restoreFlags(popStack(state));
             cpu.a = popStack(state);
             state.cycle += 10;
         },
@@ -581,13 +654,14 @@ fn step(state : *State, op:u8) void {
             trace(state);
             print("PUSH PSW\n", .{});
             pushStack(state,cpu.a);
-            pushStack(state,cpu.flags());
+            pushStack(state,cpu.saveFlags());
             state.cycle += 11;
         },
         0xFB => {
             trace(state);
             print("EI\n", .{});
-            //TODO: enable interrupts
+            //print("EI\n",.{});
+            state.interrupts_enabled = true;
             state.cycle += 4;
         },
         0xFE => {
