@@ -14,6 +14,7 @@ const Mode = enum {
 
 const Config = struct {
     max_steps : u64,
+    trace_from : u64,
     trace_every : u64,
     trace_pixs : bool,
 };
@@ -26,16 +27,19 @@ fn parse_config() Config {
     return switch (mode) {
         .test1 => Config {
             .max_steps = 50_000,
+            .trace_from = 0,
             .trace_every = 1,
             .trace_pixs = false,
         },
         .test2 => Config {
-            .max_steps = 2_310_000,
+            .max_steps = 2_361_000, //2_362 get unknown opcode DE
+            .trace_from = 0,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
         .dev => Config {
             .max_steps = 10_000_000,
+            .trace_from = 0,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
@@ -59,7 +63,7 @@ const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
 fn emulation_main_loop(state : *State) void {
     while (state.step <= state.config.max_steps) {
 
-        if (state.cycle > state.next_wakeup) {
+        if (state.cycle >= state.next_wakeup) {
             if (state.interrupts_enabled) {
                 step(state,state.next_interrupt_op);
                 state.step += 1;
@@ -208,7 +212,7 @@ fn count_on_pixels(mem: []u8) u64 {
 }
 
 fn traceOp(state: *State, comptime fmt: []const u8, args: anytype) void {
-    if (state.step % state.config.trace_every == 0) {
+    if (state.step >= state.config.trace_from and state.step % state.config.trace_every == 0) {
         printTraceLine(state);
         print(fmt,args);
         if (state.config.trace_pixs) {
@@ -328,10 +332,7 @@ fn doIn(state: *State, channel: u8) u8 {
 fn dad(cpu: *Cpu, word: u16) void { // double add
     const res : u17 = @as(u17,cpu.hl) + @as(u17,word);
     cpu.hl = @truncate(res);
-    if (res>>16 == 1) {
-        //TODO: set carry out
-        unreachable;
-    }
+    cpu.flagY = @truncate(res >> 16);
 }
 
 fn add_with_carry(cpu: *Cpu, byte: u8, cin: u1) void {
@@ -708,7 +709,7 @@ fn step(state : *State, op:u8) void {
             cpu.a = res;
             setFlags(cpu,res);
             cpu.flagY = 0;
-            state.cycle += 7;
+            state.cycle += 4;
         },
         0xB4 => {
             traceOp(state, "OR   H", .{});
@@ -716,7 +717,7 @@ fn step(state : *State, op:u8) void {
             cpu.a = res;
             setFlags(cpu,res);
             cpu.flagY = 0;
-            state.cycle += 7;
+            state.cycle += 4;
         },
         0xB6 => {
             traceOp(state, "OR   (HL)", .{});
@@ -758,7 +759,7 @@ fn step(state : *State, op:u8) void {
         0xC4 => {
             const word = fetch16(state);
             traceOp(state, "CALL NZ,{X:0>4}", .{word});
-            if (cpu.flagY == 0) {
+            if (cpu.flagZ == 0) {
                 pushStack(state,hi(cpu.pc)); // hi then lo
                 pushStack(state,lo(cpu.pc));
                 cpu.pc = word;
@@ -961,7 +962,7 @@ fn step(state : *State, op:u8) void {
         },
         0xF6 => {
             const byte = fetch(state);
-            traceOp(state, "OR  {X:0>2}", .{byte});
+            traceOp(state, "OR   {X:0>2}", .{byte});
             const res = cpu.a | byte;
             cpu.a = res;
             setFlags(cpu,res);
