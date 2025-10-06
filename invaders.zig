@@ -32,7 +32,7 @@ fn parse_config() Config {
             .trace_pixs = false,
         },
         .test2 => Config {
-            .max_steps = 2_361_000, //2_362 get unknown opcode DE
+            .max_steps = 3_060_000,
             .trace_from = 0,
             .trace_every = 10_000,
             .trace_pixs = true,
@@ -282,15 +282,6 @@ fn setFlags(cpu: *Cpu, byte: u8) void {
     cpu.flagZ = if (byte == 0) 1 else 0;
 }
 
-fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
-    if (b>a) {
-        cpu.flagY = 1;
-        return 256 + @as(u9,a) - @as(u9,b);
-    }
-    cpu.flagY = 0;
-    return @as(u9,a - b);
-}
-
 fn doOut(state: *State, channel: u8, value : u8) void {
     switch (channel) {
         0x02 => state.shifter.offset = @truncate(value),
@@ -350,6 +341,21 @@ fn add_with_carry(cpu: *Cpu, byte: u8, cin: u1) void {
     }
 }
 
+fn subtract_with_borrow(cpu: *Cpu, a: u8, b0 : u8, borrow: u1) u8 {
+    const b = b0 + borrow;
+    if (b>a) {
+        cpu.flagY = 1;
+        const xres = 256 + @as(u9,a) - @as(u9,b);
+        const res : u8 = @truncate(xres);
+        setFlags(cpu,res);
+        return res;
+    }
+    cpu.flagY = 0;
+    const xres = @as(u9,a - b);
+    const res : u8 = @truncate(xres);
+    setFlags(cpu,res);
+    return res;
+}
 
 fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
@@ -437,6 +443,13 @@ fn step(state : *State, op:u8) void {
             cpu.setDE(1 + cpu.DE());
             state.cycle += 5;
         },
+        0x14 => {
+            traceOp(state, "INC  D", .{});
+            const byte = increment(cpu.d);
+            cpu.d = byte;
+            setFlags(cpu,byte);
+            state.cycle += 5;
+        },
         0x15 => {
             traceOp(state, "DEC  D", .{});
             const byte = decrement(cpu.d);
@@ -513,6 +526,11 @@ fn step(state : *State, op:u8) void {
             cpu.hl = hilo(hi(cpu.hl),byte);
             state.cycle += 7;
         },
+        0x2F => {
+            traceOp(state, "CPL", .{});
+            cpu.a = ~ cpu.a;
+            state.cycle += 4;
+        },
         0x31 => {
             const word = fetch16(state);
             traceOp(state, "LD   SP,{X:0>4}", .{word});
@@ -573,6 +591,11 @@ fn step(state : *State, op:u8) void {
             traceOp(state, "LD   B,(HL)", .{});
             cpu.b = state.mem[cpu.hl];
             state.cycle += 7;
+        },
+        0x47 => {
+            traceOp(state, "LD   B,A", .{});
+            cpu.b = cpu.a;
+            state.cycle += 5;
         },
         0x4E => {
             traceOp(state, "LD   C,(HL)", .{});
@@ -674,9 +697,22 @@ fn step(state : *State, op:u8) void {
             cpu.a = state.mem[cpu.hl];
             state.cycle += 7;
         },
+        0x85 => {
+            traceOp(state, "ADD  L", .{});
+            add_with_carry(cpu, lo(cpu.hl), 0);
+            state.cycle += 4;
+        },
         0x86 => {
             traceOp(state, "ADD  (HL)", .{});
             add_with_carry(cpu, state.mem[cpu.hl], 0);
+            state.cycle += 7;
+        },
+        0xA6 => {
+            traceOp(state, "AND  (HL)", .{});
+            const res = cpu.a & state.mem[cpu.hl];
+            cpu.a = res;
+            setFlags(cpu,res);
+            cpu.flagY = 0;
             state.cycle += 7;
         },
         0xA7 => {
@@ -869,10 +905,7 @@ fn step(state : *State, op:u8) void {
         0xD6 => {
             const byte = fetch(state);
             traceOp(state, "SUB  {X:0>2}", .{byte});
-            const xres : u9 = subtract(cpu,cpu.a,byte);
-            const res : u8 = @truncate(xres);
-            cpu.a = res;
-            setFlags(cpu,res);
+            cpu.a = subtract_with_borrow(cpu,cpu.a,byte,0);
             state.cycle += 7;
         },
         0xD7 => {
@@ -904,6 +937,12 @@ fn step(state : *State, op:u8) void {
             traceOp(state, "IN   {X:0>2}", .{byte});
             cpu.a = doIn(state,byte);
             state.cycle += 10;
+        },
+        0xDE => {
+            const byte = fetch(state);
+            traceOp(state, "SBC  {X:0>2}", .{byte});
+            cpu.a = subtract_with_borrow(cpu,cpu.a,byte,cpu.flagY);
+            state.cycle += 7;
         },
         0xE1 => {
             traceOp(state, "POP  HL", .{});
@@ -983,9 +1022,7 @@ fn step(state : *State, op:u8) void {
         0xFE => {
             const byte = fetch(state);
             traceOp(state, "CP   {X:0>2}", .{byte});
-            const xres : u9 = subtract(cpu,cpu.a,byte);
-            const res : u8 = @truncate(xres);
-            setFlags(cpu,res);
+            _ = subtract_with_borrow(cpu,cpu.a,byte,0);
             state.cycle += 7;
         },
         else => {
