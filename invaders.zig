@@ -32,15 +32,15 @@ fn parse_config() Config {
             .trace_pixs = false,
         },
         .test2 => Config {
-            .max_steps = 9_260_000, //OOB write 9_264_118
+            .max_steps = 10_000_000,
             .trace_from = 0,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
         .dev => Config {
-            .max_steps = 10_000_000,
+            .max_steps = 1_000_000_000,
             .trace_from = 0,
-            .trace_every = 10_000,
+            .trace_every = 10_000_000,
             .trace_pixs = true,
         },
     };
@@ -693,8 +693,9 @@ fn step(state : *State, op:u8) void {
         },
         0x77 => {
             traceOp(state, "LD   (HL),A", .{});
-            if (cpu.hl >= mem_size) { stop(state,op); unreachable; }
-            state.mem[cpu.hl] = cpu.a;
+            var addr = cpu.hl;
+            if (addr >= mem_size) addr -= 0x2000; //ram mirror
+            state.mem[addr] = cpu.a;
             state.cycle += 7;
         },
         0x78 => {
