@@ -9,7 +9,6 @@ const mem_size = 16 * 1024;
 pub fn main() !void {
     const config = parse_config();
     //print("** Zig Invaders ** {any}\n",.{config});
-    //var mem : [mem_size]u8 = undefined;
     var mem = [_]u8{0} ** mem_size;
     try load_roms(&mem);
     var state = init_state(config,&mem);
@@ -70,12 +69,12 @@ fn parse_config() Config {
             .trace_pixs = false,
         },
         .test2 => Config {
-            .max_steps = 2_250_000,
+            .max_steps = 2_313_000,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
         .dev => Config {
-            .max_steps = 2_260_000,
+            .max_steps = 10_000_000,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
@@ -134,12 +133,16 @@ const Cpu = struct {
         return hilo(self.d,self.e);
     }
     fn saveFlags(self:*Cpu) u8 {
-        //TODO other flags
-        return if (self.flagZ == 1) 0x40 else 0;
+        var res: u8 = 0;
+        if (self.flagS == 1) res += 0x80;
+        if (self.flagZ == 1) res += 0x40;
+        if (self.flagY == 1) res += 0x01;
+        return res;
     }
     fn restoreFlags(self:*Cpu, byte: u8) void {
+        self.flagS = if (byte & 0x80 == 0) 0 else 1;
         self.flagZ = if (byte & 0x40 == 0) 0 else 1;
-        //TODO other flags
+        self.flagY = if (byte & 0x01 == 0) 0 else 1;
     }
 };
 
@@ -296,6 +299,31 @@ fn doIn(state: *State, channel: u8) u8 {
     }
 }
 
+fn dad(cpu: *Cpu, word: u16) void { // double add
+    const res : u17 = @as(u17,cpu.hl) + @as(u17,word);
+    cpu.hl = @truncate(res);
+    if (res>>16 == 1) {
+        //TODO: set carry out
+        unreachable;
+    }
+}
+
+fn add_with_carry(cpu: *Cpu, byte: u8, cin: u1) void {
+    if (cin == 1) {
+        //TODO: use carry in
+        unreachable;
+    }
+    const res: u9 = @as(u9,cpu.a) + @as(u9,byte);
+    const res_byte: u8 = @truncate(res);
+    cpu.a = res_byte;
+    setFlags(cpu,res_byte);
+    if (res>>8 == 1) {
+        //TODO: set carry out
+        unreachable;
+    }
+}
+
+
 fn step(state : *State, op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
@@ -329,7 +357,7 @@ fn step(state : *State, op:u8) void {
         },
         0x09 => {
             traceOp(state, "ADD  HL,BC", .{});
-            cpu.hl = cpu.hl + cpu.BC();
+            dad(cpu,cpu.BC());
             state.cycle += 10;
         },
         0x0A => {
@@ -370,7 +398,7 @@ fn step(state : *State, op:u8) void {
         },
         0x19 => {
             traceOp(state, "ADD  HL,DE", .{});
-            cpu.hl = cpu.hl + cpu.DE();
+            dad(cpu,cpu.DE());
             state.cycle += 10;
         },
         0x1A => {
@@ -397,8 +425,14 @@ fn step(state : *State, op:u8) void {
         },
         0x29 => {
             traceOp(state, "ADD  HL,HL", .{});
-            cpu.hl <<= 1;
+            dad(cpu,cpu.hl);
             state.cycle += 10;
+        },
+        0x2E => {
+            const byte = fetch(state);
+            traceOp(state, "LD   L,{X:0>2}", .{byte});
+            cpu.hl = hilo(hi(cpu.hl),byte);
+            state.cycle += 7;
         },
         0x31 => {
             const word = fetch16(state);
@@ -494,6 +528,11 @@ fn step(state : *State, op:u8) void {
             state.mem[cpu.hl] = cpu.a;
             state.cycle += 7;
         },
+        0x79 => {
+            traceOp(state, "LD   A,C", .{});
+            cpu.a = cpu.c;
+            state.cycle += 5;
+        },
         0x7A => {
             traceOp(state, "LD   A,D", .{});
             cpu.a = cpu.d;
@@ -507,6 +546,11 @@ fn step(state : *State, op:u8) void {
         0x7C => {
             traceOp(state, "LD   A,H", .{});
             cpu.a = hi(cpu.hl);
+            state.cycle += 5;
+        },
+        0x7D => {
+            traceOp(state, "LD   A,L", .{});
+            cpu.a = lo(cpu.hl);
             state.cycle += 5;
         },
         0x7E => {
@@ -527,7 +571,16 @@ fn step(state : *State, op:u8) void {
             const res = cpu.a ^ cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
+            cpu.flagY = 0;
             state.cycle += 4;
+        },
+        0xB6 => {
+            traceOp(state, "OR   (HL)", .{});
+            const res = cpu.a | state.mem[cpu.hl];
+            cpu.a = res;
+            setFlags(cpu,res);
+            cpu.flagY = 0;
+            state.cycle += 7;
         },
         0xC1 => {
             traceOp(state, "POP  BC", .{});
@@ -556,9 +609,7 @@ fn step(state : *State, op:u8) void {
         0xC6 => {
             const byte = fetch(state);
             traceOp(state, "ADD  {X:0>2}", .{byte});
-            const res = cpu.a + byte; //TODO carry
-            setFlags(cpu,res);
-            cpu.a = res;
+            add_with_carry(cpu, byte, cpu.flagY);
             state.cycle += 7;
         },
         0xC8 => {
@@ -712,9 +763,13 @@ fn step(state : *State, op:u8) void {
             state.cycle += 7;
         },
         else => {
-            printTraceLine(state);
-            print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
-            std.process.exit(0);
+            stop(state,op);
         }
     }
+}
+
+fn stop(state: *State, op: u8) void {
+    printTraceLine(state);
+    print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
+    std.process.exit(0);
 }
