@@ -6,6 +6,42 @@ const os = std.os;
 const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
 
+const Mode = enum {
+    test1,
+    test2,
+    dev,
+};
+
+const Config = struct {
+    max_steps : u64,
+    trace_every : u64,
+    trace_pixs : bool,
+};
+
+fn parse_config() Config {
+    const n_args = os.argv.len - 1;
+    if (n_args != 1) @panic("need exactly one arg");
+    const arg1 = std.mem.span(os.argv[1]);
+    const mode = std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
+    return switch (mode) {
+        .test1 => Config {
+            .max_steps = 50_000,
+            .trace_every = 1,
+            .trace_pixs = false,
+        },
+        .test2 => Config {
+            .max_steps = 2_315_000,
+            .trace_every = 10_000,
+            .trace_pixs = true,
+        },
+        .dev => Config {
+            .max_steps = 10_000_000,
+            .trace_every = 10_000,
+            .trace_pixs = true,
+        },
+    };
+}
+
 pub fn main() !void {
     const config = parse_config();
     //print("** Zig Invaders ** {any}\n",.{config});
@@ -43,42 +79,6 @@ fn load_roms(mem : []u8) !void {
     _ = try dir.readFile("invaders.g", mem[rom_size..]);
     _ = try dir.readFile("invaders.f", mem[2*rom_size..]);
     _ = try dir.readFile("invaders.e", mem[3*rom_size..]);
-}
-
-const Mode = enum {
-    test1,
-    test2,
-    dev,
-};
-
-const Config = struct {
-    max_steps : u64,
-    trace_every : u64,
-    trace_pixs : bool,
-};
-
-fn parse_config() Config {
-    const n_args = os.argv.len - 1;
-    if (n_args != 1) @panic("need exactly one arg");
-    const arg1 = std.mem.span(os.argv[1]);
-    const mode = std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
-    return switch (mode) {
-        .test1 => Config {
-            .max_steps = 50_000,
-            .trace_every = 1,
-            .trace_pixs = false,
-        },
-        .test2 => Config {
-            .max_steps = 2_313_000,
-            .trace_every = 10_000,
-            .trace_pixs = true,
-        },
-        .dev => Config {
-            .max_steps = 10_000_000,
-            .trace_every = 10_000,
-            .trace_pixs = true,
-        },
-    };
 }
 
 const State = struct {
@@ -174,6 +174,7 @@ fn printTraceLine(state: *State) void {
 }
 
 fn count_bits(byte: u8) u8 {
+    //TODO: comptime inline loop
     var res : u8 = 0;
     res += (if (byte & (1<<0) == 0) 0 else 1);
     res += (if (byte & (1<<1) == 0) 0 else 1);
@@ -236,7 +237,7 @@ fn pushStack(state: *State, byte: u8) void {
 
 fn popStack(state: *State) u8 {
     const byte = state.mem[state.cpu.sp];
-    state.cpu.sp += 1; // increment after reead
+    state.cpu.sp += 1; // increment after read
     return byte;
 }
 
@@ -271,14 +272,13 @@ fn subtract(cpu: *Cpu, a: u8, b : u8) u9 {
 }
 
 fn doOut(state: *State, channel: u8, value : u8) void {
-    _ = state;
     switch (channel) {
         0x03 => {}, //TODO sound
         0x05 => {}, //TODO sound
         0x06 => {}, //watchdog; ignore
         else => {
             print("**doOut: channel={X:0>2} value={X:0>2}\n", .{channel,value});
-            unreachable;
+            stop(state,0xD3);
         },
     }
 }
@@ -355,6 +355,14 @@ fn step(state : *State, op:u8) void {
             cpu.b = byte;
             state.cycle += 7;
         },
+        0x07 => {
+            traceOp(state, "RLCA", .{});
+            const shunted : bool = cpu.a & 0x80 == 1;
+            cpu.a = if (shunted) cpu.a << 1 | 0x01 else cpu.a << 1;
+            if (!shunted and cpu.flagY == 1) unreachable;
+            if (shunted) cpu.flagY = 1; //BUG
+            state.cycle += 4;
+        },
         0x09 => {
             traceOp(state, "ADD  HL,BC", .{});
             dad(cpu,cpu.BC());
@@ -380,9 +388,10 @@ fn step(state : *State, op:u8) void {
         },
         0x0F => {
             traceOp(state, "RRCA", .{});
-            const shunted : bool = cpu.a & 1 == 1;
+            const shunted : bool = cpu.a & 0x01 == 1;
             cpu.a = if (shunted) cpu.a >> 1 | 0x80 else cpu.a >> 1;
-            if (shunted) cpu.flagY = 1;
+            if (!shunted and cpu.flagY == 1) unreachable;
+            if (shunted) cpu.flagY = 1; //BUG
             state.cycle += 4;
         },
         0x11 => {
@@ -395,6 +404,12 @@ fn step(state : *State, op:u8) void {
             traceOp(state, "INC  DE", .{});
             cpu.setDE(1 + cpu.DE());
             state.cycle += 5;
+        },
+        0x16 => {
+            const byte = fetch(state);
+            traceOp(state, "LD   D,{X:0>2}", .{byte});
+            cpu.d = byte;
+            state.cycle += 7;
         },
         0x19 => {
             traceOp(state, "ADD  HL,DE", .{});
@@ -427,6 +442,17 @@ fn step(state : *State, op:u8) void {
             traceOp(state, "ADD  HL,HL", .{});
             dad(cpu,cpu.hl);
             state.cycle += 10;
+        },
+        0x2A => {
+            const word = fetch16(state);
+            traceOp(state, "LD   HL,({X:0>4})", .{word});
+            cpu.hl = hilo (state.mem[word+1], state.mem[word]);
+            state.cycle += 16;
+        },
+        0x2B => {
+            traceOp(state, "DEC  HL", .{});
+            cpu.hl -= 1;
+            state.cycle += 5;
         },
         0x2E => {
             const byte = fetch(state);
@@ -483,6 +509,11 @@ fn step(state : *State, op:u8) void {
             cpu.a = byte;
             state.cycle += 7;
         },
+        0x46 => {
+            traceOp(state, "LD   B,(HL)", .{});
+            cpu.b = state.mem[cpu.hl];
+            state.cycle += 7;
+        },
         0x4F => {
             traceOp(state, "LD   C,A", .{});
             cpu.c = cpu.a;
@@ -528,6 +559,11 @@ fn step(state : *State, op:u8) void {
             state.mem[cpu.hl] = cpu.a;
             state.cycle += 7;
         },
+        0x78 => {
+            traceOp(state, "LD   A,B", .{});
+            cpu.a = cpu.b;
+            state.cycle += 5;
+        },
         0x79 => {
             traceOp(state, "LD   A,C", .{});
             cpu.a = cpu.c;
@@ -566,6 +602,14 @@ fn step(state : *State, op:u8) void {
             cpu.flagY = 0;
             state.cycle += 4;
         },
+        0xA8 => {
+            traceOp(state, "XOR  B", .{});
+            const res = cpu.a ^ cpu.b;
+            cpu.a = res;
+            setFlags(cpu,res);
+            cpu.flagY = 0;
+            state.cycle += 4;
+        },
         0xAF => {
             traceOp(state, "XOR  A", .{});
             const res = cpu.a ^ cpu.a;
@@ -574,6 +618,14 @@ fn step(state : *State, op:u8) void {
             cpu.flagY = 0;
             state.cycle += 4;
         },
+        0xB0 => {
+            traceOp(state, "OR   B", .{});
+            const res = cpu.a | cpu.b;
+            cpu.a = res;
+            setFlags(cpu,res);
+            cpu.flagY = 0;
+            state.cycle += 7;
+        },
         0xB6 => {
             traceOp(state, "OR   (HL)", .{});
             const res = cpu.a | state.mem[cpu.hl];
@@ -581,6 +633,17 @@ fn step(state : *State, op:u8) void {
             setFlags(cpu,res);
             cpu.flagY = 0;
             state.cycle += 7;
+        },
+        0xC0 => {
+            traceOp(state, "RET  NZ", .{});
+            if (cpu.flagZ == 0) {
+                const b = popStack(state);
+                const a = popStack(state);
+                cpu.pc = hilo(a,b);
+                state.cycle += 11;
+            } else {
+                state.cycle += 5;
+            }
         },
         0xC1 => {
             traceOp(state, "POP  BC", .{});
@@ -591,8 +654,8 @@ fn step(state : *State, op:u8) void {
         0xC2 => {
             const word = fetch16(state);
             traceOp(state, "JP   NZ,{X:0>4}", .{word});
-            state.cycle += 10;
             if (cpu.flagZ == 0) { cpu.pc = word; }
+            state.cycle += 10;
         },
         0xC3 => {
             const word = fetch16(state);
@@ -600,6 +663,20 @@ fn step(state : *State, op:u8) void {
             cpu.pc = word;
             state.cycle += 10;
         },
+
+        0xC4 => {
+            const word = fetch16(state);
+            traceOp(state, "CALL NZ,{X:0>4}", .{word});
+            if (cpu.flagY == 0) {
+                pushStack(state,hi(cpu.pc)); // hi then lo
+                pushStack(state,lo(cpu.pc));
+                cpu.pc = word;
+                state.cycle += 17;
+            } else {
+                state.cycle += 11;
+            }
+        },
+
         0xC5 => {
             traceOp(state, "PUSH BC", .{});
             pushStack(state,cpu.b);
@@ -633,10 +710,7 @@ fn step(state : *State, op:u8) void {
         0xCA => {
             const word = fetch16(state);
             traceOp(state, "JP   Z,{X:0>4}", .{word});
-            if (cpu.flagZ == 1) {
-                //TODO: do the conditional jump
-                unreachable;
-            }
+            if (cpu.flagZ == 1) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xCD => {
@@ -653,6 +727,17 @@ fn step(state : *State, op:u8) void {
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x08;
             state.cycle += 4;
+        },
+        0xD0 => {
+            traceOp(state, "RET  NC", .{});
+            if (cpu.flagY == 0) {
+                const b = popStack(state);
+                const a = popStack(state);
+                cpu.pc = hilo(a,b);
+                state.cycle += 11;
+            } else {
+                state.cycle += 5;
+            }
         },
         0xD1 => {
             traceOp(state, "POP  DE", .{});
@@ -678,6 +763,15 @@ fn step(state : *State, op:u8) void {
             pushStack(state,cpu.e);
             state.cycle += 11;
         },
+        0xD6 => {
+            const byte = fetch(state);
+            traceOp(state, "SUB  {X:0>2}", .{byte});
+            const xres : u9 = subtract(cpu,cpu.a,byte);
+            const res : u8 = @truncate(xres);
+            cpu.a = res;
+            setFlags(cpu,res);
+            state.cycle += 7;
+        },
         0xD7 => {
             traceOp(state, "RST  2", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
@@ -699,8 +793,8 @@ fn step(state : *State, op:u8) void {
         0xDA => {
             const word = fetch16(state);
             traceOp(state, "JP   CY,{X:0>4}", .{word});
-            state.cycle += 10;
             if (cpu.flagY == 1) { cpu.pc = word; }
+            state.cycle += 10;
         },
         0xDB => {
             const byte = fetch(state);
@@ -714,6 +808,15 @@ fn step(state : *State, op:u8) void {
             const a = popStack(state);
             cpu.hl = hilo(a,b);
             state.cycle += 10;
+        },
+        0xE3 => {
+            traceOp(state, "EX   (SP),HL", .{});
+            const b = state.mem[state.cpu.sp];
+            const a = state.mem[state.cpu.sp+1];
+            state.mem[state.cpu.sp] = lo(cpu.hl);
+            state.mem[state.cpu.sp+1] = hi(cpu.hl);
+            cpu.hl = hilo(a,b);
+            state.cycle += 18;
         },
         0xE5 => {
             traceOp(state, "PUSH HL", .{});
@@ -729,6 +832,11 @@ fn step(state : *State, op:u8) void {
             setFlags(cpu,res);
             cpu.flagY = 0;
             state.cycle += 7;
+        },
+        0xE9 => {
+            traceOp(state, "JP   (HL)", .{});
+            cpu.pc = cpu.hl;
+            state.cycle += 5;
         },
         0xEB => {
             traceOp(state, "EX   DE,HL", .{});
