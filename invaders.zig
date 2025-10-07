@@ -62,9 +62,9 @@ fn configure(mode: Mode) Config {
             .trace_pixs = true,
         },
         .speed => Config {
-            .max_steps = 10_000_000,
+            .max_steps = 200_000_000,
             .trace_from = 1,
-            .trace_every = 10_000_000,
+            .trace_every = 100_000_000,
             .trace_pixs = false
         },
     };

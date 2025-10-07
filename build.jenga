@@ -1,6 +1,7 @@
 
 invaders: invaders.zig
-  zig build-exe invaders.zig
+  #zig build-exe invaders.zig
+  zig build-exe invaders.zig -O ReleaseFast
 
 actual1.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test1 > actual1.out 2>&1 || true
