@@ -84,9 +84,12 @@ pub fn main() !void {
     var state = init_state(config,&mem);
 
     const tic = mono_clock_ns();
-    const enable_trace = state.config.enable_trace;
 
-    emulation_main_loop(enable_trace, &state);
+    switch (state.config.enable_trace) {
+        inline else => |enable_trace| {
+            emulation_main_loop(enable_trace, &state);
+        }
+    }
 
     const toc = mono_clock_ns();
 
@@ -109,7 +112,7 @@ const first_interrupt_op = 0xCF;
 const second_interrupt_op = 0xD7;
 const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
 
-fn emulation_main_loop(enable_trace: bool, state : *State) void {
+fn emulation_main_loop(comptime enable_trace: bool, state : *State) void {
 
     while (state.step <= state.config.max_steps) {
 
@@ -388,7 +391,7 @@ fn subtract_with_borrow(cpu: *Cpu, a: u8, b0 : u8, borrow: u1) u8 {
     return res;
 }
 
-fn trace_op(enable_trace: bool, state: *State, comptime fmt: []const u8, args: anytype) void {
+fn trace_op(comptime enable_trace: bool, state: *State, comptime fmt: []const u8, args: anytype) void {
     if (enable_trace) {
         if (state.step >= state.config.trace_from
                 and state.step % state.config.trace_every == 0) {
@@ -403,7 +406,7 @@ fn trace_op(enable_trace: bool, state: *State, comptime fmt: []const u8, args: a
     }
 }
 
-fn step_op(enable_trace: bool, state : *State, op:u8) void {
+fn step_op(comptime enable_trace: bool, state : *State, op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
