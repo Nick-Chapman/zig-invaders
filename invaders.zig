@@ -6,11 +6,33 @@ const os = std.os;
 const rom_size = 2 * 1024;
 const mem_size = 16 * 1024;
 
+const two_million = 2_000_000;
+const clock_frequency = two_million; // of the 8080 CPU being simulated
+
+const billion = 1_000_000_000;
+const nanos_per_clock_cycle = billion / clock_frequency; //500
+
+fn mono_clock_ns() u64 { // do time computation in nano-seconds.
+    const linux = std.os.linux;
+    const clock_id = linux.clockid_t.MONOTONIC;
+    const ts : linux.timespec = std.posix.clock_gettime(clock_id) catch unreachable;
+    const n : i64 = ts.sec * billion + ts.nsec;
+    return @intCast(n);
+}
+
 const Mode = enum {
     test1,
     test2,
     dev,
+    speed,
 };
+
+fn parse_mode() Mode {
+    const n_args = os.argv.len - 1;
+    if (n_args != 1) @panic("need exactly one arg");
+    const arg1 = std.mem.span(os.argv[1]);
+    return std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
+}
 
 const Config = struct {
     max_steps : u64,
@@ -19,11 +41,7 @@ const Config = struct {
     trace_pixs : bool,
 };
 
-fn parse_config() Config {
-    const n_args = os.argv.len - 1;
-    if (n_args != 1) @panic("need exactly one arg");
-    const arg1 = std.mem.span(os.argv[1]);
-    const mode = std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
+fn configure(mode: Mode) Config {
     return switch (mode) {
         .test1 => Config {
             .max_steps = 50_000,
@@ -38,24 +56,47 @@ fn parse_config() Config {
             .trace_pixs = true,
         },
         .dev => Config {
-            .max_steps = 1_000_000_000,
+            .max_steps = 10_000_000,
             .trace_from = 0,
-            .trace_every = 10_000_000,
+            .trace_every = 1_000_000,
             .trace_pixs = true,
+        },
+        .speed => Config {
+            .max_steps = 10_000_000,
+            .trace_from = 1,
+            .trace_every = 10_000_000,
+            .trace_pixs = false
         },
     };
 }
 
 pub fn main() !void {
-    const config = parse_config();
+    const mode = parse_mode();
+    const config = configure(mode);
     //print("** Zig Invaders ** {any}\n",.{config});
     var mem = [_]u8{0} ** mem_size;
     try load_roms(&mem);
     var state = init_state(config,&mem);
+
+    const tic = mono_clock_ns();
     emulation_main_loop(&state);
+    const toc = mono_clock_ns();
+
+    if (mode == .speed) {
+        const cycles = state.cycle;
+        const wall_ns : u64 = toc - tic;
+        const sim_s = @as(f32,@floatFromInt(cycles)) / clock_frequency;
+        const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
+        const speed_up_factor = nanos_per_clock_cycle * cycles / wall_ns;
+        print("sim(s) = {d:.3}; wall(s) = {d:.3}; speed-up factor: x{d}\n" ,.{
+            sim_s,
+            wall_s,
+            speed_up_factor,
+        });
+    }
 }
 
-const half_frame_cycles = 2_000_000 / 120;
+const half_frame_cycles = clock_frequency / 120;
 const first_interrupt_op = 0xCF;
 const second_interrupt_op = 0xD7;
 const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
