@@ -7,8 +7,8 @@ zig_installed_location: version
   echo ~/zig/zig-x86_64-linux-$(cat version) > zig_installed_location
 
 mode:
-  #echo Debug > mode
-  echo ReleaseFast > mode
+  echo Debug > mode
+  #echo ReleaseFast > mode #gotta go fast!
 
 zig.sh: zig_installed_location mode
   echo  $(cat zig_installed_location)/zig build-exe -O $(cat mode) '"$@"' > zig.sh
@@ -42,3 +42,6 @@ diff1.out: expected1.out actual1.out
 diff2.out: expected2.out actual2.out
   #git diff --word-diff=color expected2.out actual2.out | tee diff2.out
   git diff --color expected2.out actual2.out | tee diff2.out
+
+speed.out: invaders invaders.e invaders.f invaders.g invaders.h
+  ./invaders speed 2>&1 | tee speed.out

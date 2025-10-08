@@ -67,9 +67,9 @@ fn configure(mode: Mode) Config {
         },
         .speed => Config {
             .enable_trace = false,
-            .max_steps = 200_000_000,
+            .max_steps = 20_000_000, // was 200mil for ReleaseFast
             .trace_from = 1,
-            .trace_every = 100_000_000,
+            .trace_every = 10_000_000,
             .trace_pixs = false
         },
     };
@@ -407,6 +407,14 @@ fn trace_op(comptime enable_trace: bool, state: *State, comptime fmt: []const u8
 }
 
 fn step_op(comptime enable_trace: bool, state : *State, op:u8) void {
+    switch (op) {
+        inline else => |ct_op| {
+            step_ct_op(enable_trace, state, ct_op);
+        }
+    }
+}
+
+fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
