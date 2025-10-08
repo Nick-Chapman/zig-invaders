@@ -25,6 +25,7 @@ const Mode = enum {
     test2,
     dev,
     speed,
+    graphics,
 };
 
 fn parse_mode() Mode {
@@ -72,6 +73,13 @@ fn configure(mode: Mode) Config {
             .trace_every = 10_000_000,
             .trace_pixs = false
         },
+        .graphics => Config {
+            .enable_trace = false,
+            .max_steps = 0,
+            .trace_from = 0,
+            .trace_every = 100_000,
+            .trace_pixs = false
+        },
     };
 }
 
@@ -82,6 +90,11 @@ pub fn main() !void {
     var mem = [_]u8{0} ** mem_size;
     try load_roms(&mem);
     var state = init_state(config,&mem);
+
+    if (mode == .graphics) {
+        try graphics_main(&state);
+        return;
+    }
 
     const tic = mono_clock_ns();
 
@@ -1185,4 +1198,149 @@ fn stop(state: *State, op: u8) void {
     printTraceLine(state);
     print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1+state.step});
     std.process.exit(0);
+}
+
+
+const c = @cImport({
+    @cInclude("SDL2/SDL.h");
+});
+
+const render_scale = 2;
+
+const pixel_w = 224;
+const pixel_h = 256;
+
+const video_mem_size = 7 * 1024;
+var video_mem = [_]u8{0} ** video_mem_size;
+
+fn my_draw_picture(renderer: *c.SDL_Renderer, state: *State) void {
+    _ = c.SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
+    _ = c.SDL_RenderClear(renderer);
+    _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    var counter : usize = 0x2400;
+    for (0..pixel_w) |y| {
+        for (0..pixel_h/8) |xi| {
+            const byte = state.mem[counter];
+            counter += 1;
+            for (0..8) |i| {
+                const x = xi * 8 + i;
+                const on = ((byte >> @intCast(i)) & 1) == 1;
+                if (on) {
+                    const rect = c.SDL_Rect {
+                        .x = @intCast(y * render_scale),
+                        .y = @intCast( (255-x) * render_scale),
+                        .w = render_scale,
+                        .h = render_scale,
+                    };
+                    _ = c.SDL_RenderFillRect(renderer, &rect);
+                }
+            }
+        }
+    }
+}
+
+pub fn graphics_main(state: *State) !void {
+
+    state.config.max_steps = 0;
+
+    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
+        c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
+        return error.SDLInitializationFailed;
+    }
+    defer c.SDL_Quit();
+
+    const screen_w = render_scale * pixel_w;
+    const screen_h = render_scale * pixel_h;
+
+    const screen = c.SDL_CreateWindow(
+        "Soon to be Space Invaders",
+        1000, //c.SDL_WINDOWPOS_UNDEFINED,
+        100, //c.SDL_WINDOWPOS_UNDEFINED,
+        screen_w,
+        screen_h,
+        c.SDL_WINDOW_OPENGL
+    ) orelse {
+        c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
+        return error.SDLInitializationFailed;
+    };
+    defer c.SDL_DestroyWindow(screen);
+
+    const renderer = c.SDL_CreateRenderer(screen, -1, 0) orelse {
+        c.SDL_Log("Unable to create renderer: %s", c.SDL_GetError());
+        return error.SDLInitializationFailed;
+    };
+    defer c.SDL_DestroyRenderer(renderer);
+
+    print("starting event loop\n",.{});
+    var quit = false;
+    var frame : usize = 0;
+    const tic = mono_clock_ns();
+    var max_cycles : u64 = 0;
+    var speed_up_factor : i32 = 1;
+
+    while (!quit) {
+
+        var buf: [8]u8 = undefined;
+        _ = try std.fmt.bufPrint(&buf, "x{d}\x00", .{speed_up_factor});
+        c.SDL_SetWindowTitle(screen,&buf);
+
+        my_draw_picture(renderer,state);
+        c.SDL_RenderPresent(renderer);
+
+        var event: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&event) != 0) {
+            switch (event.type) {
+                c.SDL_QUIT => {
+                    quit = true;
+                },
+                else => {},
+            }
+        }
+
+        const cycles_per_display_frame = if (speed_up_factor < 0) 0 else
+            2 * half_frame_cycles * @as(u32,@intCast(speed_up_factor));
+
+        frame+=1;
+        max_cycles += cycles_per_display_frame;
+        graphics_emulation_main_loop(state, max_cycles);
+
+        const toc = mono_clock_ns();
+        const wall_ns : u64 = toc - tic;
+        const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
+
+        const desired_display_fps = 60;
+        const desired_s : f32 =
+            @as(f32,@floatFromInt(frame))
+            / @as(f32,@floatFromInt(desired_display_fps));
+
+        const pause_ms : i32 = @intFromFloat((desired_s - wall_s) * 1000);
+        //print("{d} ",.{pause_ms});
+        if (pause_ms > 0) {
+            c.SDL_Delay(@intCast(pause_ms));
+        }
+        speed_up_factor =
+            speed_up_factor + pause_ms; //increase or decrease or leave alone
+
+    }
+    print("event loop ended\n",.{});
+}
+
+
+fn graphics_emulation_main_loop(state : *State, max_cycles: u64) void {
+    const enable_trace = false;
+
+    while (state.cycle <= max_cycles) {
+
+        if (state.cycle >= state.next_wakeup) {
+            if (state.interrupts_enabled) {
+                step_op(enable_trace, state, state.next_interrupt_op);
+                state.step += 1;
+            }
+            state.next_wakeup += half_frame_cycles;
+            state.next_interrupt_op ^= flip_interrupt_op;
+        }
+        const op = fetch(state);
+        step_op(enable_trace, state, op);
+        state.step += 1;
+    }
 }

@@ -2,3 +2,5 @@
 *~
 invaders
 invaders.o
+zig-out
+.zig-cache

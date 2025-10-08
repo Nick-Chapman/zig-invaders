@@ -7,15 +7,17 @@ zig_installed_location: version
   echo ~/zig/zig-x86_64-linux-$(cat version) > zig_installed_location
 
 mode:
-  echo Debug > mode
-  #echo ReleaseFast > mode #gotta go fast!
+  #echo Debug > mode
+  echo ReleaseFast > mode #gotta go fast!
 
 zig.sh: zig_installed_location mode
-  echo  $(cat zig_installed_location)/zig build-exe -O $(cat mode) '"$@"' > zig.sh
+  #echo  $(cat zig_installed_location)/zig build-exe -O $(cat mode) '"$@"' > zig.sh
+  echo $(cat zig_installed_location)/zig build -Doptimize=$(cat mode) > zig.sh
+  echo cp zig-out/bin/demo invaders >> zig.sh
   chmod +x zig.sh
 
-invaders: zig.sh invaders.zig
-  ./zig.sh invaders.zig
+invaders: zig.sh build.zig invaders.zig
+  ./zig.sh #invaders.zig
 
 actual1.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test1 > actual1.out 2>&1 || true
