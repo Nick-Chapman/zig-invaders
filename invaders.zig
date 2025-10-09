@@ -150,6 +150,7 @@ fn load_roms(mem : []u8) !void {
 
 const State = struct {
     config : Config,
+    buttons: Buttons,
     step : u64, //number of instructions executed
     cycle : u64, //simulated cycles (at clock speed of 2 MhZ)
     mem : []u8,
@@ -163,6 +164,7 @@ const State = struct {
 fn init_state(config: Config, mem: []u8) State {
     const state : State = State {
         .config = config,
+        .buttons = .init,
         .step = 0,
         .cycle = 0,
         .mem = mem,
@@ -353,11 +355,16 @@ fn doOut(state: *State, channel: u8, value : u8) void {
 
 fn doIn(state: *State, channel: u8) u8 {
     switch (channel) {
+        //TODO: complete input controls and dip switches on port 1 and 2
         0x01 => {
-            return 0x01; //TODO: input controls and dip switches
+            var res: u8 = 0;
+            if (!state.buttons.coin_entry) res |= 0x1; //note inverted logic on coin_entry
+            if (state.buttons.one_player_start) res |= 0x2;
+            //print ("doIn: {d}\n",.{res});
+            return res;
         },
         0x02 => {
-            return 0x00; //TODO: input controls and dip switches
+            return 0x00;
         },
         0x03 => {
             return
@@ -577,6 +584,12 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             trace_op(enable_trace, state, "LD   H,{X:0>2}", .{byte});
             cpu.hl = hilo(byte,lo(cpu.hl));
             state.cycle += 7;
+        },
+        0x27 => {
+            trace_op(enable_trace, state, "DAA", .{});
+            print("DAA\n",.{});
+            //TODO
+            state.cycle += 4;
         },
         0x29 => {
             trace_op(enable_trace, state, "ADD  HL,HL", .{});
@@ -1202,7 +1215,7 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
 });
 
-const render_scale = 2;
+const render_scale = 3;
 
 const pixel_w = 224;
 const pixel_h = 256;
@@ -1211,7 +1224,7 @@ const video_mem_size = 7 * 1024;
 var video_mem = [_]u8{0} ** video_mem_size;
 
 fn my_draw_picture(renderer: *c.SDL_Renderer, state: *State) void {
-    _ = c.SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
+    _ = c.SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
     _ = c.SDL_RenderClear(renderer);
     _ = c.SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     var counter : usize = 0x2400;
@@ -1251,8 +1264,8 @@ pub fn graphics_main(state: *State) !void {
 
     const screen = c.SDL_CreateWindow(
         "Soon to be Space Invaders",
-        1000, //c.SDL_WINDOWPOS_UNDEFINED,
-        100, //c.SDL_WINDOWPOS_UNDEFINED,
+        200, //c.SDL_WINDOWPOS_UNDEFINED,
+        50, //c.SDL_WINDOWPOS_UNDEFINED,
         screen_w,
         screen_h,
         c.SDL_WINDOW_OPENGL
@@ -1273,12 +1286,13 @@ pub fn graphics_main(state: *State) !void {
     var frame : usize = 0;
     const tic = mono_clock_ns();
     var max_cycles : u64 = 0;
-    var speed_up_factor : i32 = 1;
+    const speed_up_factor : i32 = 1;
 
     while (!quit) {
 
-        var buf: [8]u8 = undefined;
-        _ = try std.fmt.bufPrint(&buf, "x{d}\x00", .{speed_up_factor});
+        var buf: [16]u8 = undefined;
+        //_ = try std.fmt.bufPrint(&buf, "x{d}\x00", .{speed_up_factor});
+        _ = try std.fmt.bufPrint(&buf, "frame: {d}\x00", .{frame});
         c.SDL_SetWindowTitle(screen,&buf);
 
         my_draw_picture(renderer,state);
@@ -1286,7 +1300,29 @@ pub fn graphics_main(state: *State) !void {
 
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
+            const sym = event.key.keysym.sym;
             switch (event.type) {
+                c.SDL_KEYDOWN => {
+                    //print("down:sym={d}\n",.{sym});
+                    if (sym == c.SDLK_ESCAPE) {
+                        quit = true;
+                    }
+                    if (sym == c.SDLK_INSERT) {
+                        state.buttons.coin_entry = true;
+                    }
+                    if (sym == c.SDLK_F1) {
+                        state.buttons.one_player_start = true;
+                    }
+                },
+                c.SDL_KEYUP => {
+                    //print("up:sym={d}\n",.{sym});
+                    if (sym == c.SDLK_INSERT) {
+                        state.buttons.coin_entry = false;
+                    }
+                    if (sym == c.SDLK_F1) {
+                        state.buttons.one_player_start = false;
+                    }
+                },
                 c.SDL_QUIT => {
                     quit = true;
                 },
@@ -1315,8 +1351,9 @@ pub fn graphics_main(state: *State) !void {
         if (pause_ms > 0) {
             c.SDL_Delay(@intCast(pause_ms));
         }
-        speed_up_factor =
-            speed_up_factor + pause_ms; //increase or decrease or leave alone
+
+        // uncomment to go as fast as possible
+        //speed_up_factor = speed_up_factor + pause_ms; //increase or decrease or leave alone
 
     }
     print("event loop ended\n",.{});
@@ -1341,3 +1378,13 @@ fn graphics_emulation_main_loop(state : *State, max_cycles: u64) void {
         state.step += 1;
     }
 }
+
+const Buttons = struct {
+    coin_entry: bool,
+    one_player_start: bool,
+
+    const init = Buttons {
+        .coin_entry = false,
+        .one_player_start = false,
+    };
+};
