@@ -5,7 +5,7 @@ pub fn build(b: *Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "demo",
+        .name = "invaders",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -18,7 +18,7 @@ pub fn build(b: *Build) void {
     exe.linkLibC();
     b.installArtifact(exe);
 
-    const run = b.step("run", "Run the demo");
+    const run = b.step("run", "Run Space Invaders");
     const run_cmd = b.addRunArtifact(exe);
     run.dependOn(&run_cmd.step);
 }

@@ -1,4 +1,8 @@
 
+mode:
+  echo Debug > mode # build fast
+  #echo ReleaseFast > mode
+
 version:
   #echo 0.15.0-dev.769+4d7980645 > version
   echo 0.15.1 > version
@@ -6,14 +10,10 @@ version:
 zig_installed_location: version
   echo ~/zig/zig-x86_64-linux-$(cat version) > zig_installed_location
 
-mode:
-  #echo Debug > mode
-  echo ReleaseFast > mode #gotta go fast!
-
 zig.sh: zig_installed_location mode
   #echo  $(cat zig_installed_location)/zig build-exe -O $(cat mode) '"$@"' > zig.sh
   echo $(cat zig_installed_location)/zig build -Doptimize=$(cat mode) > zig.sh
-  echo cp zig-out/bin/demo invaders >> zig.sh
+  echo cp zig-out/bin/invaders invaders >> zig.sh
   chmod +x zig.sh
 
 invaders: zig.sh build.zig invaders.zig

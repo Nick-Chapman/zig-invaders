@@ -30,13 +30,13 @@ const Mode = enum {
 
 fn parse_mode() Mode {
     const n_args = os.argv.len - 1;
-    if (n_args != 1) @panic("need exactly one arg");
+    if (n_args == 0) return .graphics;
+    if (n_args > 1) @panic("need at most one arg");
     const arg1 = std.mem.span(os.argv[1]);
     return std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
 }
 
 const Config = struct {
-    enable_trace : bool,
     max_steps : u64,
     trace_from : u64,
     trace_every : u64,
@@ -46,35 +46,30 @@ const Config = struct {
 fn configure(mode: Mode) Config {
     return switch (mode) {
         .test1 => Config {
-            .enable_trace = true,
             .max_steps = 50_000,
             .trace_from = 0,
             .trace_every = 1,
             .trace_pixs = false,
         },
         .test2 => Config {
-            .enable_trace = true,
             .max_steps = 10_000_000,
             .trace_from = 0,
             .trace_every = 10_000,
             .trace_pixs = true,
         },
         .dev => Config {
-            .enable_trace = true,
             .max_steps = 10_000_000,
             .trace_from = 0,
             .trace_every = 1_000_000,
             .trace_pixs = true,
         },
         .speed => Config {
-            .enable_trace = false,
-            .max_steps = 20_000_000, // was 200mil for ReleaseFast
+            .max_steps = 2_000_000, // was 200mil for ReleaseFast
             .trace_from = 1,
-            .trace_every = 10_000_000,
+            .trace_every = 1_000_000,
             .trace_pixs = false
         },
         .graphics => Config {
-            .enable_trace = false,
             .max_steps = 0,
             .trace_from = 0,
             .trace_every = 100_000,
@@ -98,9 +93,11 @@ pub fn main() !void {
 
     const tic = mono_clock_ns();
 
-    switch (state.config.enable_trace) {
-        inline else => |enable_trace| {
-            emulation_main_loop(enable_trace, &state);
+    const enable_trace = ! (mode == .speed);
+
+    switch (enable_trace) {
+        inline else => |enable_trace_ct| {
+            emulation_main_loop(enable_trace_ct, &state);
         }
     }
 
