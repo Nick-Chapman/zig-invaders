@@ -108,11 +108,11 @@ pub fn main() !void {
         const wall_ns : u64 = toc - tic;
         const sim_s = @as(f32,@floatFromInt(cycles)) / clock_frequency;
         const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
-        const speed_up_factor = nanos_per_clock_cycle * cycles / wall_ns;
+        const speed = nanos_per_clock_cycle * cycles / wall_ns;
         print("sim(s) = {d:.3}; wall(s) = {d:.3}; speed-up factor: x{d}\n" ,.{
             sim_s,
             wall_s,
-            speed_up_factor,
+            speed,
         });
     }
 }
@@ -348,15 +348,21 @@ fn doOut(state: *State, channel: u8, value : u8) void {
 }
 
 fn doIn(state: *State, channel: u8) u8 {
+    const buttons = state.buttons;
     switch (channel) {
-        //TODO: complete input controls and dip switches on port 1 and 2
         0x01 => {
             var res: u8 = 0;
-            if (!state.buttons.coin_entry) res |= 0x1; //note inverted logic on coin_entry
-            if (state.buttons.one_player_start) res |= 0x2;
+            if (!buttons.coin_deposit) res |= 0x1; //inverted logic for coin_deposit
+            if (buttons.two_player_start) res |= 0x2;
+            if (buttons.one_player_start) res |= 0x4;
+            //res |= 0x8;
+            if (buttons.p1_fire) res |= 0x10;
+            if (buttons.p1_left) res |= 0x20;
+            if (buttons.p1_right) res |= 0x40;
             //print ("doIn: {d}\n",.{res});
             return res;
         },
+        //TODO: input controls and dip switches on port 2
         0x02 => {
             return 0x00;
         },
@@ -1294,34 +1300,8 @@ pub fn graphics_main(state: *State) !void {
 
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
-            const sym = event.key.keysym.sym;
-            switch (event.type) {
-                c.SDL_KEYDOWN => {
-                    //print("down:sym={d}\n",.{sym});
-                    if (sym == c.SDLK_ESCAPE) {
-                        quit = true;
-                    }
-                    if (sym == c.SDLK_INSERT) {
-                        state.buttons.coin_entry = true;
-                    }
-                    if (sym == c.SDLK_F1) {
-                        state.buttons.one_player_start = true;
-                    }
-                },
-                c.SDL_KEYUP => {
-                    //print("up:sym={d}\n",.{sym});
-                    if (sym == c.SDLK_INSERT) {
-                        state.buttons.coin_entry = false;
-                    }
-                    if (sym == c.SDLK_F1) {
-                        state.buttons.one_player_start = false;
-                    }
-                },
-                c.SDL_QUIT => {
-                    quit = true;
-                },
-                else => {},
-            }
+            //print("{any}\n",.{event});
+            process_event(event, &state.buttons, &quit);
         }
 
         const cycles_per_display_frame = if (speed_up_factor < 0) 0 else
@@ -1374,11 +1354,47 @@ fn graphics_emulation_main_loop(state : *State, max_cycles: u64) void {
 }
 
 const Buttons = struct {
-    coin_entry: bool,
+    coin_deposit: bool,
     one_player_start: bool,
+    two_player_start: bool,
+    p1_left : bool,
+    p1_right : bool,
+    p1_fire : bool,
 
     const init = Buttons {
-        .coin_entry = false,
+        .coin_deposit = false,
         .one_player_start = false,
+        .two_player_start = false,
+        .p1_left = false,
+        .p1_right = false,
+        .p1_fire = false,
     };
 };
+
+fn process_event(event: c.SDL_Event, buttons: *Buttons, quit: *bool) void {
+    const sym = event.key.keysym.sym;
+    switch (event.type) {
+        c.SDL_KEYDOWN => {
+            //print("down:sym={d}\n",.{sym});
+            if (sym == c.SDLK_ESCAPE) quit.* = true;
+            process_sym(sym, buttons, true);
+        },
+        c.SDL_KEYUP => {
+            //print("up:sym={d}\n",.{sym});
+            process_sym(sym, buttons, false);
+        },
+        c.SDL_QUIT => {
+            quit.* = true;
+        },
+        else => {},
+    }
+}
+
+fn process_sym(sym: i32, buttons: *Buttons, pressed: bool) void {
+    if (sym == c.SDLK_INSERT) buttons.coin_deposit = pressed;
+    if (sym == c.SDLK_F1) buttons.one_player_start = pressed;
+    if (sym == c.SDLK_F2) buttons.two_player_start = pressed;
+    if (sym == c.SDLK_RETURN) buttons.p1_fire = pressed;
+    if (sym == 'z') buttons.p1_left = pressed;
+    if (sym == 'x') buttons.p1_right = pressed;
+}
