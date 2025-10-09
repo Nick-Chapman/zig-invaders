@@ -519,6 +519,13 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             cpu.setDE(word);
             state.cycle += 10;
         },
+        0x12 => {
+            trace_op(enable_trace, state, "LD   (DE),A", .{});
+            var addr = cpu.DE();
+            if (addr >= mem_size) addr -= 0x2000; //ram mirror
+            state.mem[addr] = cpu.a;
+            state.cycle += 7;
+        },
         0x13 => {
             trace_op(enable_trace, state, "INC  DE", .{});
             cpu.setDE(1 + cpu.DE());
