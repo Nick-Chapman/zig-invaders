@@ -554,6 +554,11 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             cpu.a = state.mem[cpu.DE()];
             state.cycle += 7;
         },
+        0x1B => {
+            trace_op(enable_trace, state, "DEC  DE", .{});
+            cpu.setDE(if (cpu.DE() == 0) 0xffff else cpu.DE() - 1);
+            state.cycle += 5;
+        },
         0x1F => {
             trace_op(enable_trace, state, "RAR", .{});
             const shunted : u1 = @truncate(cpu.a);
@@ -703,6 +708,11 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             cpu.b = cpu.a;
             state.cycle += 5;
         },
+        0x48 => {
+            trace_op(enable_trace, state, "LD   C,B", .{});
+            cpu.c = cpu.b;
+            state.cycle += 5;
+        },
         0x4E => {
             trace_op(enable_trace, state, "LD   C,(HL)", .{});
             cpu.c = state.mem[cpu.hl];
@@ -830,6 +840,11 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             add_with_carry(cpu, cpu.c, 0);
             state.cycle += 4;
         },
+        0x83 => {
+            trace_op(enable_trace, state, "ADD  E", .{});
+            add_with_carry(cpu, cpu.e, 0);
+            state.cycle += 4;
+        },
         0x85 => {
             trace_op(enable_trace, state, "ADD  L", .{});
             add_with_carry(cpu, lo(cpu.hl), 0);
@@ -839,6 +854,11 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             trace_op(enable_trace, state, "ADD  (HL)", .{});
             add_with_carry(cpu, state.mem[cpu.hl], 0);
             state.cycle += 7;
+        },
+        0x8A => {
+            trace_op(enable_trace, state, "ADC  D", .{});
+            add_with_carry(cpu, cpu.d, cpu.flagY);
+            state.cycle += 4;
         },
         0x97 => {
             trace_op(enable_trace, state, "SUB  A", .{});
