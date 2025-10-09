@@ -149,7 +149,7 @@ fn load_roms(mem : []u8) !void {
 }
 
 const State = struct {
-    config : Config,
+    config : Config, //TODO: dont pass config as part of state
     buttons: Buttons,
     step : u64, //number of instructions executed
     cycle : u64, //simulated cycles (at clock speed of 2 MhZ)
@@ -168,8 +168,8 @@ fn init_state(config: Config, mem: []u8) State {
         .step = 0,
         .cycle = 0,
         .mem = mem,
-        .cpu = init_cpu(),
-        .shifter = init_shiter(),
+        .cpu = .init,
+        .shifter = .init,
         .interrupts_enabled = false,
         .next_wakeup = half_frame_cycles,
         .next_interrupt_op = first_interrupt_op,
@@ -215,25 +215,19 @@ const Cpu = struct {
         self.flagZ = if (byte & 0x40 == 0) 0 else 1;
         self.flagY = if (byte & 0x01 == 0) 0 else 1;
     }
-};
-
-fn init_cpu() Cpu {
-    return Cpu {
+    const init = Cpu {
         .pc = 0, .sp = 0, .a = 0, .hl = 0,
         .b = 0, .c = 0, .d = 0, .e = 0,
         .flagS = 0, .flagZ = 0, .flagY = 0,
     };
-}
+};
 
 const Shifter = struct {
     lo : u8,
     hi : u8,
     offset : u3,
+    const init = Shifter { .lo = 0, .hi = 0, .offset = 0 };
 };
-
-fn init_shiter() Shifter {
-    return Shifter { .lo = 0, .hi = 0, .offset = 0 };
-}
 
 fn printTraceLine(state: *State) void {
     const cpu = state.cpu;
