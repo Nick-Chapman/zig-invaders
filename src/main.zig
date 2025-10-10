@@ -8,75 +8,41 @@ const machine = @import("machine");
 
 pub fn main() !void {
     const mode = command_line.parse_mode();
-    const config = configure(mode);
-    //print("** Zig Invaders ** {any}\n",.{config});
     var mem = [_]u8{0} ** machine.mem_size;
     try load_roms(&mem);
-    var state = machine.init_state(config,&mem);
-    if (mode == .graphics) {
-        try graphics_main(&state);
-        return;
-    }
-    const tic = wallclock.time();
-    const enable_trace = ! (mode == .speed);
+    var state = machine.init_state(&mem);
 
-    switch (enable_trace) {
-        inline else => |enable_trace_ct| {
-            while (state.icount <= state.config.max_steps) {
-                machine.step(enable_trace_ct, the_tracer, &state);
-            }
-        }
-    }
+    switch (mode) {
+        .test1 => trace_emulate(test1_tracer, &state, 50_000),
+        .test2 => trace_emulate(test2_tracer, &state, 10_000_000),
 
-    const toc = wallclock.time();
-    const nanos_per_clock_cycle = billion / machine.clock_frequency; //500
-    if (mode == .speed) {
-        const cycles = state.cycle;
-        const wall_ns : u64 = toc - tic;
-        const sim_s = @as(f32,@floatFromInt(cycles)) / machine.clock_frequency;
-        const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
-        const speed = nanos_per_clock_cycle * cycles / wall_ns;
-        print("sim(s) = {d:.3}; wall(s) = {d:.3}; speed-up factor: x{d}\n" ,.{
-            sim_s,
-            wall_s,
-            speed,
-        });
+        .graphics => try graphics_main(&state),
+
+        .speed => {
+
+            const tic = wallclock.time();
+            trace_emulate(null_tracer, &state, 5_000_000);
+            const toc = wallclock.time();
+
+            const nanos_per_clock_cycle = billion / machine.clock_frequency; //500
+            const cycles = state.cycle;
+            const wall_ns : u64 = toc - tic;
+            const sim_s = @as(f32,@floatFromInt(cycles)) / machine.clock_frequency;
+            const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
+            const speed = nanos_per_clock_cycle * cycles / wall_ns;
+            print("sim(s) = {d:.3}; wall(s) = {d:.3}; speed-up factor: x{d}\n" ,.{
+                sim_s,
+                wall_s,
+                speed,
+            });
+        },
     }
 }
 
-fn configure(mode: command_line.Mode) machine.Config {
-    return switch (mode) {
-        .test1 => .{
-            .max_steps = 50_000,
-            .trace_from = 0,
-            .trace_every = 1,
-            .trace_pixs = false,
-        },
-        .test2 => .{
-            .max_steps = 10_000_000,
-            .trace_from = 0,
-            .trace_every = 10_000,
-            .trace_pixs = true,
-        },
-        .dev => .{
-            .max_steps = 10_000_000,
-            .trace_from = 0,
-            .trace_every = 1_000_000,
-            .trace_pixs = true,
-        },
-        .speed => .{
-            .max_steps = 2_000_000, // was 200mil for ReleaseFast
-            .trace_from = 1,
-            .trace_every = 1_000_000,
-            .trace_pixs = false
-        },
-        .graphics => .{
-            .max_steps = 0,
-            .trace_from = 0,
-            .trace_every = 100_000,
-            .trace_pixs = false
-        },
-    };
+fn trace_emulate(tracer: machine.Tracer, state: *machine.State, max_steps: u64) void {
+    while (state.icount <= max_steps) {
+        machine.step(tracer, state);
+    }
 }
 
 const rom_size = 2 * 1024;
@@ -125,8 +91,6 @@ fn draw_screen(renderer: *c.SDL_Renderer, state: *machine.State) void {
 }
 
 fn graphics_main(state: *machine.State) !void {
-
-    state.config.max_steps = 0;
 
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
@@ -180,8 +144,7 @@ fn graphics_main(state: *machine.State) !void {
         max_cycles += cycles_per_display_frame;
 
         while (state.cycle <= max_cycles) {
-            const enable_trace = false;
-            machine.step(enable_trace, the_tracer, state);
+            machine.step(null_tracer, state);
         }
 
         const toc = wallclock.time();
@@ -229,12 +192,42 @@ fn process_sym(sym: i32, buttons: *machine.Buttons, pressed: bool) void {
     if (sym == 'x') buttons.p1_right = pressed;
 }
 
-fn the_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
-    if (state.icount >= state.config.trace_from
-            and state.icount % state.config.trace_every == 0) {
+fn null_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    _ = state;
+    _ = fmt;
+    _ = args;
+}
+
+pub const Config = struct {
+    trace_from : u64,
+    trace_every : u64,
+    trace_pixs : bool,
+};
+
+fn test1_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    const config = Config {
+        .trace_from = 0,
+        .trace_every = 1,
+        .trace_pixs = false,
+    };
+    config_tracer(config,state,fmt,args);
+}
+
+fn test2_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    const config = Config {
+        .trace_from = 0,
+        .trace_every = 10_000,
+        .trace_pixs = true,
+    };
+    config_tracer(config,state,fmt,args);
+}
+
+fn config_tracer(config: Config, state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    if (state.icount >= config.trace_from
+            and state.icount % config.trace_every == 0) {
         printTraceLine(state);
         print(fmt,args);
-        if (state.config.trace_pixs) {
+        if (config.trace_pixs) {
             print(" #pixs:{d}\n",.{count_on_pixels(state.mem)});
         } else {
             print("\n",.{});

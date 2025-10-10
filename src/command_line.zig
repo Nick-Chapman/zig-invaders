@@ -4,7 +4,6 @@ const os = std.os;
 pub const Mode = enum {
     test1,
     test2,
-    dev,
     speed,
     graphics,
 };

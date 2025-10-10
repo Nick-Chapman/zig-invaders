@@ -9,13 +9,6 @@ pub const clock_frequency = two_million; // of the 8080 CPU being simulated
 pub const mem_size = 16 * 1024;
 pub const half_frame_cycles = clock_frequency / (2 * fps);
 
-pub const Config = struct {
-    max_steps : u64,
-    trace_from : u64,
-    trace_every : u64,
-    trace_pixs : bool,
-};
-
 pub const Buttons = struct {
     coin_deposit: bool,
     one_player_start: bool,
@@ -35,7 +28,6 @@ pub const Buttons = struct {
 };
 
 pub const State = struct {
-    config : Config, //TODO: dont pass config as part of state
     buttons: Buttons,
     icount : u64, //count of instructions executed
     cycle : u64, //count of simulated cycles (at clock speed of 2 MhZ)
@@ -47,9 +39,8 @@ pub const State = struct {
     next_interrupt_op : u8,
 };
 
-pub fn init_state(config: Config, mem: []u8) State {
+pub fn init_state(mem: []u8) State {
     const state : State = State {
-        .config = config,
         .buttons = .init,
         .icount = 0,
         .cycle = 0,
@@ -67,57 +58,57 @@ const first_interrupt_op = 0xCF;
 const second_interrupt_op = 0xD7;
 const flip_interrupt_op = first_interrupt_op ^ second_interrupt_op;
 
-const Tracer = fn (*State, comptime []const u8, anytype) void;
+pub const Tracer = fn (*State, comptime []const u8, anytype) void;
 
-pub fn step(comptime enable_trace: bool, tracer: Tracer, state: *State) void {
+pub fn step(comptime tracer: Tracer, state: *State) void {
     if (state.cycle >= state.next_wakeup) {
         if (state.interrupts_enabled) {
-            step_op(enable_trace, tracer, state, state.next_interrupt_op);
+            step_op(tracer, state, state.next_interrupt_op);
             state.icount += 1;
         }
         state.next_wakeup += half_frame_cycles;
         state.next_interrupt_op ^= flip_interrupt_op;
     }
     const op = fetch(state);
-    step_op(enable_trace, tracer, state, op);
+    step_op(tracer, state, op);
     state.icount += 1;
 }
 
-fn step_op(comptime enable_trace: bool, tracer: Tracer, state : *State, op:u8) void {
+fn step_op(comptime tracer: Tracer, state : *State, op:u8) void {
     switch (op) {
         inline else => |ct_op| {
-            step_ct_op(enable_trace, tracer, state, ct_op);
+            step_ct_op(tracer, state, ct_op);
         }
     }
 }
 
-fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, comptime op:u8) void {
+fn step_ct_op(comptime tracer: Tracer, state : *State, comptime op:u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
-            trace_op(enable_trace, tracer, state, "NOP",.{});
+            tracer(state, "NOP",.{});
             state.cycle += 4;
         },
         0x01 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   BC,{X:0>4}", .{word});
+            tracer(state, "LD   BC,{X:0>4}", .{word});
             cpu.setBC(word);
             state.cycle += 10;
         },
         0x03 => {
-            trace_op(enable_trace, tracer, state, "INC  BC", .{});
+            tracer(state, "INC  BC", .{});
             cpu.setBC(1 + cpu.BC());
             state.cycle += 5;
         },
         0x04 => {
-            trace_op(enable_trace, tracer, state, "INC  B", .{});
+            tracer(state, "INC  B", .{});
             const byte = increment(cpu.b);
             cpu.b = byte;
             setFlags(cpu,byte);
             state.cycle += 5;
         },
         0x05 => {
-            trace_op(enable_trace, tracer, state, "DEC  B", .{});
+            tracer(state, "DEC  B", .{});
             const byte = decrement(cpu.b);
             cpu.b = byte;
             setFlags(cpu,byte);
@@ -125,36 +116,36 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x06 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   B,{X:0>2}", .{byte});
+            tracer(state, "LD   B,{X:0>2}", .{byte});
             cpu.b = byte;
             state.cycle += 7;
         },
         0x07 => {
-            trace_op(enable_trace, tracer, state, "RLCA", .{});
+            tracer(state, "RLCA", .{});
             const shunted : u1 = @truncate(cpu.a >> 7);
             cpu.a = cpu.a<<1 | shunted;
             cpu.flagY = shunted;
             state.cycle += 4;
         },
         0x09 => {
-            trace_op(enable_trace, tracer, state, "ADD  HL,BC", .{});
+            tracer(state, "ADD  HL,BC", .{});
             dad(cpu,cpu.BC());
             state.cycle += 10;
         },
         0x0A => {
-            trace_op(enable_trace, tracer, state, "LD   A,(BC)", .{});
+            tracer(state, "LD   A,(BC)", .{});
             cpu.a = state.mem[cpu.BC()];
             state.cycle += 7;
         },
         0x0C => {
-            trace_op(enable_trace, tracer, state, "INC  C", .{});
+            tracer(state, "INC  C", .{});
             const byte = increment(cpu.c);
             cpu.c = byte;
             setFlags(cpu,byte);
             state.cycle += 5;
         },
         0x0D => {
-            trace_op(enable_trace, tracer, state, "DEC  C", .{});
+            tracer(state, "DEC  C", .{});
             const byte = decrement(cpu.c);
             cpu.c = byte;
             setFlags(cpu,byte);
@@ -162,12 +153,12 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x0E => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   C,{X:0>2}", .{byte});
+            tracer(state, "LD   C,{X:0>2}", .{byte});
             cpu.c = byte;
             state.cycle += 7;
         },
         0x0F => {
-            trace_op(enable_trace, tracer, state, "RRCA", .{});
+            tracer(state, "RRCA", .{});
             const shunted : u1 = @truncate(cpu.a);
             cpu.a = @as(u8,shunted)<<7 | cpu.a>>1;
             cpu.flagY = shunted;
@@ -175,31 +166,31 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x11 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   DE,{X:0>4}", .{word});
+            tracer(state, "LD   DE,{X:0>4}", .{word});
             cpu.setDE(word);
             state.cycle += 10;
         },
         0x12 => {
-            trace_op(enable_trace, tracer, state, "LD   (DE),A", .{});
+            tracer(state, "LD   (DE),A", .{});
             var addr = cpu.DE();
             if (addr >= mem_size) addr -= 0x2000; //ram mirror
             state.mem[addr] = cpu.a;
             state.cycle += 7;
         },
         0x13 => {
-            trace_op(enable_trace, tracer, state, "INC  DE", .{});
+            tracer(state, "INC  DE", .{});
             cpu.setDE(1 + cpu.DE());
             state.cycle += 5;
         },
         0x14 => {
-            trace_op(enable_trace, tracer, state, "INC  D", .{});
+            tracer(state, "INC  D", .{});
             const byte = increment(cpu.d);
             cpu.d = byte;
             setFlags(cpu,byte);
             state.cycle += 5;
         },
         0x15 => {
-            trace_op(enable_trace, tracer, state, "DEC  D", .{});
+            tracer(state, "DEC  D", .{});
             const byte = decrement(cpu.d);
             cpu.d = byte;
             setFlags(cpu,byte);
@@ -207,27 +198,27 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x16 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   D,{X:0>2}", .{byte});
+            tracer(state, "LD   D,{X:0>2}", .{byte});
             cpu.d = byte;
             state.cycle += 7;
         },
         0x19 => {
-            trace_op(enable_trace, tracer, state, "ADD  HL,DE", .{});
+            tracer(state, "ADD  HL,DE", .{});
             dad(cpu,cpu.DE());
             state.cycle += 10;
         },
         0x1A => {
-            trace_op(enable_trace, tracer, state, "LD   A,(DE)", .{});
+            tracer(state, "LD   A,(DE)", .{});
             cpu.a = state.mem[cpu.DE()];
             state.cycle += 7;
         },
         0x1B => {
-            trace_op(enable_trace, tracer, state, "DEC  DE", .{});
+            tracer(state, "DEC  DE", .{});
             cpu.setDE(if (cpu.DE() == 0) 0xffff else cpu.DE() - 1);
             state.cycle += 5;
         },
         0x1F => {
-            trace_op(enable_trace, tracer, state, "RAR", .{});
+            tracer(state, "RAR", .{});
             const shunted : u1 = @truncate(cpu.a);
             cpu.a = @as(u8,cpu.flagY)<<7 | cpu.a>>1;
             cpu.flagY = shunted;
@@ -235,13 +226,13 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x21 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   HL,{X:0>4}", .{word});
+            tracer(state, "LD   HL,{X:0>4}", .{word});
             cpu.hl = word;
             state.cycle += 10;
         },
         0x22 => {
             var word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   ({X:0>4}),HL", .{word});
+            tracer(state, "LD   ({X:0>4}),HL", .{word});
             if (word >= mem_size) {
                 //word -= 0x2000; //ram mirror
                 const masked = word & 0x3fff;
@@ -253,40 +244,40 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 16;
         },
         0x23 => {
-            trace_op(enable_trace, tracer, state, "INC  HL", .{});
+            tracer(state, "INC  HL", .{});
             cpu.hl += 1;
             state.cycle += 5;
         },
         0x26 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   H,{X:0>2}", .{byte});
+            tracer(state, "LD   H,{X:0>2}", .{byte});
             cpu.hl = hilo(byte,lo(cpu.hl));
             state.cycle += 7;
         },
         0x27 => {
-            trace_op(enable_trace, tracer, state, "DAA", .{});
+            tracer(state, "DAA", .{});
             print("DAA\n",.{});
             //TODO
             state.cycle += 4;
         },
         0x29 => {
-            trace_op(enable_trace, tracer, state, "ADD  HL,HL", .{});
+            tracer(state, "ADD  HL,HL", .{});
             dad(cpu,cpu.hl);
             state.cycle += 10;
         },
         0x2A => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   HL,({X:0>4})", .{word});
+            tracer(state, "LD   HL,({X:0>4})", .{word});
             cpu.hl = hilo (state.mem[word+1], state.mem[word]);
             state.cycle += 16;
         },
         0x2B => {
-            trace_op(enable_trace, tracer, state, "DEC  HL", .{});
+            tracer(state, "DEC  HL", .{});
             cpu.hl = if (cpu.hl == 0) 0xffff else cpu.hl - 1;
             state.cycle += 5;
         },
         0x2C => {
-            trace_op(enable_trace, tracer, state, "INC  L", .{});
+            tracer(state, "INC  L", .{});
             const byte = increment(lo(cpu.hl));
             cpu.hl = hilo(hi(cpu.hl),byte);
             setFlags(cpu,byte);
@@ -294,36 +285,36 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x2E => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   L,{X:0>2}", .{byte});
+            tracer(state, "LD   L,{X:0>2}", .{byte});
             cpu.hl = hilo(hi(cpu.hl),byte);
             state.cycle += 7;
         },
         0x2F => {
-            trace_op(enable_trace, tracer, state, "CPL", .{});
+            tracer(state, "CPL", .{});
             cpu.a = ~ cpu.a;
             state.cycle += 4;
         },
         0x31 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   SP,{X:0>4}", .{word});
+            tracer(state, "LD   SP,{X:0>4}", .{word});
             cpu.sp = word;
             state.cycle += 10;
         },
         0x32 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   ({X:0>4}),A", .{word});
+            tracer(state, "LD   ({X:0>4}),A", .{word});
             state.mem[word] = cpu.a;
             state.cycle += 13;
         },
         0x34 => {
-            trace_op(enable_trace, tracer, state, "INC  (HL)", .{});
+            tracer(state, "INC  (HL)", .{});
             const byte = increment(state.mem[cpu.hl]);
             state.mem[cpu.hl] = byte;
             setFlags(cpu,byte);
             state.cycle += 10;
         },
         0x35 => {
-            trace_op(enable_trace, tracer, state, "DEC  (HL)", .{});
+            tracer(state, "DEC  (HL)", .{});
             const byte = decrement(state.mem[cpu.hl]);
             state.mem[cpu.hl] = byte;
             setFlags(cpu,byte);
@@ -331,30 +322,30 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x36 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   (HL),{X:0>2}", .{byte});
+            tracer(state, "LD   (HL),{X:0>2}", .{byte});
             state.mem[cpu.hl] = byte;
             state.cycle += 10;
         },
         0x37 => {
-            trace_op(enable_trace, tracer, state, "SCF", .{});
+            tracer(state, "SCF", .{});
             cpu.flagY = 1;
             state.cycle += 4;
         },
         0x3A => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "LD   A,({X:0>4})", .{word});
+            tracer(state, "LD   A,({X:0>4})", .{word});
             cpu.a = state.mem[word];
             state.cycle += 13;
         },
         0x3C => {
-            trace_op(enable_trace, tracer, state, "INC  A", .{});
+            tracer(state, "INC  A", .{});
             const byte = increment(cpu.a);
             cpu.a = byte;
             setFlags(cpu,byte);
             state.cycle += 5;
         },
         0x3D => {
-            trace_op(enable_trace, tracer, state, "DEC  A", .{});
+            tracer(state, "DEC  A", .{});
             const byte = decrement(cpu.a);
             cpu.a = byte;
             setFlags(cpu,byte);
@@ -362,184 +353,184 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0x3E => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "LD   A,{X:0>2}", .{byte});
+            tracer(state, "LD   A,{X:0>2}", .{byte});
             cpu.a = byte;
             state.cycle += 7;
         },
         0x41 => {
-            trace_op(enable_trace, tracer, state, "LD   B,C", .{});
+            tracer(state, "LD   B,C", .{});
             cpu.b = cpu.c;
             state.cycle += 5;
         },
         0x46 => {
-            trace_op(enable_trace, tracer, state, "LD   B,(HL)", .{});
+            tracer(state, "LD   B,(HL)", .{});
             cpu.b = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x47 => {
-            trace_op(enable_trace, tracer, state, "LD   B,A", .{});
+            tracer(state, "LD   B,A", .{});
             cpu.b = cpu.a;
             state.cycle += 5;
         },
         0x48 => {
-            trace_op(enable_trace, tracer, state, "LD   C,B", .{});
+            tracer(state, "LD   C,B", .{});
             cpu.c = cpu.b;
             state.cycle += 5;
         },
         0x4E => {
-            trace_op(enable_trace, tracer, state, "LD   C,(HL)", .{});
+            tracer(state, "LD   C,(HL)", .{});
             cpu.c = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x4F => {
-            trace_op(enable_trace, tracer, state, "LD   C,A", .{});
+            tracer(state, "LD   C,A", .{});
             cpu.c = cpu.a;
             state.cycle += 5;
         },
         0x56 => {
-            trace_op(enable_trace, tracer, state, "LD   D,(HL)", .{});
+            tracer(state, "LD   D,(HL)", .{});
             cpu.d = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x57 => {
-            trace_op(enable_trace, tracer, state, "LD   D,A", .{});
+            tracer(state, "LD   D,A", .{});
             cpu.d = cpu.a;
             state.cycle += 5;
         },
         0x5E => {
-            trace_op(enable_trace, tracer, state, "LD   E,(HL)", .{});
+            tracer(state, "LD   E,(HL)", .{});
             cpu.e = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x5F => {
-            trace_op(enable_trace, tracer, state, "LD   E,A", .{});
+            tracer(state, "LD   E,A", .{});
             cpu.e = cpu.a;
             state.cycle += 5;
         },
         0x61 => {
-            trace_op(enable_trace, tracer, state, "LD   H,C", .{});
+            tracer(state, "LD   H,C", .{});
             cpu.hl = hilo(cpu.c,lo(cpu.hl));
             state.cycle += 5;
         },
         0x65 => {
-            trace_op(enable_trace, tracer, state, "LD   H,L", .{});
+            tracer(state, "LD   H,L", .{});
             cpu.hl = hilo(lo(cpu.hl),lo(cpu.hl));
             state.cycle += 5;
         },
         0x66 => {
-            trace_op(enable_trace, tracer, state, "LD   H,(HL)", .{});
+            tracer(state, "LD   H,(HL)", .{});
             cpu.hl = hilo(state.mem[cpu.hl],lo(cpu.hl));
             state.cycle += 7;
         },
         0x67 => {
-            trace_op(enable_trace, tracer, state, "LD   H,A", .{});
+            tracer(state, "LD   H,A", .{});
             cpu.hl = hilo(cpu.a,lo(cpu.hl));
             state.cycle += 5;
         },
         0x68 => {
-            trace_op(enable_trace, tracer, state, "LD   L,B", .{});
+            tracer(state, "LD   L,B", .{});
             cpu.hl = hilo(hi(cpu.hl),cpu.b);
             state.cycle += 5;
         },
         0x69 => {
-            trace_op(enable_trace, tracer, state, "LD   L,C", .{});
+            tracer(state, "LD   L,C", .{});
             cpu.hl = hilo(hi(cpu.hl),cpu.c);
             state.cycle += 5;
         },
         0x6F => {
-            trace_op(enable_trace, tracer, state, "LD   L,A", .{});
+            tracer(state, "LD   L,A", .{});
             cpu.hl = hilo(hi(cpu.hl),cpu.a);
             state.cycle += 5;
         },
         0x70 => {
-            trace_op(enable_trace, tracer, state, "LD   (HL),B", .{});
+            tracer(state, "LD   (HL),B", .{});
             state.mem[cpu.hl] = cpu.b;
             state.cycle += 7;
         },
         0x71 => {
-            trace_op(enable_trace, tracer, state, "LD   (HL),C", .{});
+            tracer(state, "LD   (HL),C", .{});
             state.mem[cpu.hl] = cpu.c;
             state.cycle += 7;
         },
         0x77 => {
-            trace_op(enable_trace, tracer, state, "LD   (HL),A", .{});
+            tracer(state, "LD   (HL),A", .{});
             var addr = cpu.hl;
             if (addr >= mem_size) addr -= 0x2000; //ram mirror
             state.mem[addr] = cpu.a;
             state.cycle += 7;
         },
         0x78 => {
-            trace_op(enable_trace, tracer, state, "LD   A,B", .{});
+            tracer(state, "LD   A,B", .{});
             cpu.a = cpu.b;
             state.cycle += 5;
         },
         0x79 => {
-            trace_op(enable_trace, tracer, state, "LD   A,C", .{});
+            tracer(state, "LD   A,C", .{});
             cpu.a = cpu.c;
             state.cycle += 5;
         },
         0x7A => {
-            trace_op(enable_trace, tracer, state, "LD   A,D", .{});
+            tracer(state, "LD   A,D", .{});
             cpu.a = cpu.d;
             state.cycle += 5;
         },
         0x7B => {
-            trace_op(enable_trace, tracer, state, "LD   A,E", .{});
+            tracer(state, "LD   A,E", .{});
             cpu.a = cpu.e;
             state.cycle += 5;
         },
         0x7C => {
-            trace_op(enable_trace, tracer, state, "LD   A,H", .{});
+            tracer(state, "LD   A,H", .{});
             cpu.a = hi(cpu.hl);
             state.cycle += 5;
         },
         0x7D => {
-            trace_op(enable_trace, tracer, state, "LD   A,L", .{});
+            tracer(state, "LD   A,L", .{});
             cpu.a = lo(cpu.hl);
             state.cycle += 5;
         },
         0x7E => {
-            trace_op(enable_trace, tracer, state, "LD   A,(HL)", .{});
+            tracer(state, "LD   A,(HL)", .{});
             cpu.a = state.mem[cpu.hl];
             state.cycle += 7;
         },
         0x80 => {
-            trace_op(enable_trace, tracer, state, "ADD  B", .{});
+            tracer(state, "ADD  B", .{});
             add_with_carry(cpu, cpu.b, 0);
             state.cycle += 4;
         },
         0x81 => {
-            trace_op(enable_trace, tracer, state, "ADD  C", .{});
+            tracer(state, "ADD  C", .{});
             add_with_carry(cpu, cpu.c, 0);
             state.cycle += 4;
         },
         0x83 => {
-            trace_op(enable_trace, tracer, state, "ADD  E", .{});
+            tracer(state, "ADD  E", .{});
             add_with_carry(cpu, cpu.e, 0);
             state.cycle += 4;
         },
         0x85 => {
-            trace_op(enable_trace, tracer, state, "ADD  L", .{});
+            tracer(state, "ADD  L", .{});
             add_with_carry(cpu, lo(cpu.hl), 0);
             state.cycle += 4;
         },
         0x86 => {
-            trace_op(enable_trace, tracer, state, "ADD  (HL)", .{});
+            tracer(state, "ADD  (HL)", .{});
             add_with_carry(cpu, state.mem[cpu.hl], 0);
             state.cycle += 7;
         },
         0x8A => {
-            trace_op(enable_trace, tracer, state, "ADC  D", .{});
+            tracer(state, "ADC  D", .{});
             add_with_carry(cpu, cpu.d, cpu.flagY);
             state.cycle += 4;
         },
         0x97 => {
-            trace_op(enable_trace, tracer, state, "SUB  A", .{});
+            tracer(state, "SUB  A", .{});
             cpu.a = subtract_with_borrow(cpu,cpu.a,cpu.a,0);
             state.cycle += 4;
         },
         0xA0 => {
-            trace_op(enable_trace, tracer, state, "AND  B", .{});
+            tracer(state, "AND  B", .{});
             const res = cpu.a & cpu.b;
             cpu.a = res;
             setFlags(cpu,res);
@@ -547,7 +538,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xA6 => {
-            trace_op(enable_trace, tracer, state, "AND  (HL)", .{});
+            tracer(state, "AND  (HL)", .{});
             const res = cpu.a & state.mem[cpu.hl];
             cpu.a = res;
             setFlags(cpu,res);
@@ -555,7 +546,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 7;
         },
         0xA7 => {
-            trace_op(enable_trace, tracer, state, "AND  A", .{});
+            tracer(state, "AND  A", .{});
             const res = cpu.a & cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
@@ -563,7 +554,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xA8 => {
-            trace_op(enable_trace, tracer, state, "XOR  B", .{});
+            tracer(state, "XOR  B", .{});
             const res = cpu.a ^ cpu.b;
             cpu.a = res;
             setFlags(cpu,res);
@@ -571,7 +562,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xAF => {
-            trace_op(enable_trace, tracer, state, "XOR  A", .{});
+            tracer(state, "XOR  A", .{});
             const res = cpu.a ^ cpu.a;
             cpu.a = res;
             setFlags(cpu,res);
@@ -579,7 +570,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xB0 => {
-            trace_op(enable_trace, tracer, state, "OR   B", .{});
+            tracer(state, "OR   B", .{});
             const res = cpu.a | cpu.b;
             cpu.a = res;
             setFlags(cpu,res);
@@ -587,7 +578,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xB4 => {
-            trace_op(enable_trace, tracer, state, "OR   H", .{});
+            tracer(state, "OR   H", .{});
             const res = cpu.a | hi(cpu.hl);
             cpu.a = res;
             setFlags(cpu,res);
@@ -595,7 +586,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 4;
         },
         0xB6 => {
-            trace_op(enable_trace, tracer, state, "OR   (HL)", .{});
+            tracer(state, "OR   (HL)", .{});
             const res = cpu.a | state.mem[cpu.hl];
             cpu.a = res;
             setFlags(cpu,res);
@@ -603,22 +594,22 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 7;
         },
         0xB8 => {
-            trace_op(enable_trace, tracer, state, "CP   B", .{});
+            tracer(state, "CP   B", .{});
             _ = subtract_with_borrow(cpu,cpu.a,cpu.b,0);
             state.cycle += 4;
         },
         0xBC => {
-            trace_op(enable_trace, tracer, state, "CP   H", .{});
+            tracer(state, "CP   H", .{});
             _ = subtract_with_borrow(cpu,cpu.a,hi(cpu.hl),0);
             state.cycle += 4;
         },
         0xBE => {
-            trace_op(enable_trace, tracer, state, "CP   (HL)", .{});
+            tracer(state, "CP   (HL)", .{});
             _ = subtract_with_borrow(cpu,cpu.a,state.mem[cpu.hl],0);
             state.cycle += 7;
         },
         0xC0 => {
-            trace_op(enable_trace, tracer, state, "RET  NZ", .{});
+            tracer(state, "RET  NZ", .{});
             if (cpu.flagZ == 0) {
                 const b = popStack(state);
                 const a = popStack(state);
@@ -629,26 +620,26 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             }
         },
         0xC1 => {
-            trace_op(enable_trace, tracer, state, "POP  BC", .{});
+            tracer(state, "POP  BC", .{});
             cpu.c = popStack(state);
             cpu.b = popStack(state);
             state.cycle += 10;
         },
         0xC2 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   NZ,{X:0>4}", .{word});
+            tracer(state, "JP   NZ,{X:0>4}", .{word});
             if (cpu.flagZ == 0) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xC3 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   {X:0>4}", .{word});
+            tracer(state, "JP   {X:0>4}", .{word});
             cpu.pc = word;
             state.cycle += 10;
         },
         0xC4 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "CALL NZ,{X:0>4}", .{word});
+            tracer(state, "CALL NZ,{X:0>4}", .{word});
             if (cpu.flagZ == 0) {
                 pushStack(state,hi(cpu.pc)); // hi then lo
                 pushStack(state,lo(cpu.pc));
@@ -659,19 +650,19 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             }
         },
         0xC5 => {
-            trace_op(enable_trace, tracer, state, "PUSH BC", .{});
+            tracer(state, "PUSH BC", .{});
             pushStack(state,cpu.b);
             pushStack(state,cpu.c);
             state.cycle += 11;
         },
         0xC6 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "ADD  {X:0>2}", .{byte});
+            tracer(state, "ADD  {X:0>2}", .{byte});
             add_with_carry(cpu, byte, 0);
             state.cycle += 7;
         },
         0xC8 => {
-            trace_op(enable_trace, tracer, state, "RET  Z", .{});
+            tracer(state, "RET  Z", .{});
             if (cpu.flagZ == 1) {
                 const b = popStack(state);
                 const a = popStack(state);
@@ -682,7 +673,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             }
         },
         0xC9 => {
-            trace_op(enable_trace, tracer, state, "RET", .{});
+            tracer(state, "RET", .{});
             const b = popStack(state);
             const a = popStack(state);
             cpu.pc = hilo(a,b);
@@ -690,13 +681,13 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0xCA => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   Z,{X:0>4}", .{word});
+            tracer(state, "JP   Z,{X:0>4}", .{word});
             if (cpu.flagZ == 1) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xCC => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "CALL Z,{X:0>4}", .{word});
+            tracer(state, "CALL Z,{X:0>4}", .{word});
             if (cpu.flagZ == 1) {
                 pushStack(state,hi(cpu.pc)); // hi then lo
                 pushStack(state,lo(cpu.pc));
@@ -708,21 +699,21 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0xCD => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "CALL {X:0>4}", .{word});
+            tracer(state, "CALL {X:0>4}", .{word});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = word;
             state.cycle += 17;
         },
         0xCF => {
-            trace_op(enable_trace, tracer, state, "RST  1", .{});
+            tracer(state, "RST  1", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x08;
             state.cycle += 4;
         },
         0xD0 => {
-            trace_op(enable_trace, tracer, state, "RET  NC", .{});
+            tracer(state, "RET  NC", .{});
             if (cpu.flagY == 0) {
                 const b = popStack(state);
                 const a = popStack(state);
@@ -733,26 +724,26 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             }
         },
         0xD1 => {
-            trace_op(enable_trace, tracer, state, "POP  DE", .{});
+            tracer(state, "POP  DE", .{});
             cpu.e = popStack(state);
             cpu.d = popStack(state);
             state.cycle += 10;
         },
         0xD2 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   NC,{X:0>4}", .{word});
+            tracer(state, "JP   NC,{X:0>4}", .{word});
             if (cpu.flagY == 0) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xD3 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "OUT  {X:0>2}", .{byte});
+            tracer(state, "OUT  {X:0>2}", .{byte});
             doOut(state,byte,cpu.a);
             state.cycle += 10;
         },
         0xD4 => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "CALL NC,{X:0>4}", .{word});
+            tracer(state, "CALL NC,{X:0>4}", .{word});
             if (cpu.flagY == 0) {
                 pushStack(state,hi(cpu.pc)); // hi then lo
                 pushStack(state,lo(cpu.pc));
@@ -763,26 +754,26 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             }
         },
         0xD5 => {
-            trace_op(enable_trace, tracer, state, "PUSH DE", .{});
+            tracer(state, "PUSH DE", .{});
             pushStack(state,cpu.d);
             pushStack(state,cpu.e);
             state.cycle += 11;
         },
         0xD6 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "SUB  {X:0>2}", .{byte});
+            tracer(state, "SUB  {X:0>2}", .{byte});
             cpu.a = subtract_with_borrow(cpu,cpu.a,byte,0);
             state.cycle += 7;
         },
         0xD7 => {
-            trace_op(enable_trace, tracer, state, "RST  2", .{});
+            tracer(state, "RST  2", .{});
             pushStack(state,hi(cpu.pc)); // hi then lo
             pushStack(state,lo(cpu.pc));
             cpu.pc = 0x10;
             state.cycle += 4;
         },
         0xD8 => {
-            trace_op(enable_trace, tracer, state, "RET  CY", .{});
+            tracer(state, "RET  CY", .{});
             if (cpu.flagY == 1) {
                 const b = popStack(state);
                 const a = popStack(state);
@@ -794,31 +785,31 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0xDA => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   CY,{X:0>4}", .{word});
+            tracer(state, "JP   CY,{X:0>4}", .{word});
             if (cpu.flagY == 1) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xDB => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "IN   {X:0>2}", .{byte});
+            tracer(state, "IN   {X:0>2}", .{byte});
             cpu.a = doIn(state,byte);
             state.cycle += 10;
         },
         0xDE => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "SBC  {X:0>2}", .{byte});
+            tracer(state, "SBC  {X:0>2}", .{byte});
             cpu.a = subtract_with_borrow(cpu,cpu.a,byte,cpu.flagY);
             state.cycle += 7;
         },
         0xE1 => {
-            trace_op(enable_trace, tracer, state, "POP  HL", .{});
+            tracer(state, "POP  HL", .{});
             const b = popStack(state);
             const a = popStack(state);
             cpu.hl = hilo(a,b);
             state.cycle += 10;
         },
         0xE3 => {
-            trace_op(enable_trace, tracer, state, "EX   (SP),HL", .{});
+            tracer(state, "EX   (SP),HL", .{});
             const b = state.mem[state.cpu.sp];
             const a = state.mem[state.cpu.sp+1];
             state.mem[state.cpu.sp] = lo(cpu.hl);
@@ -827,14 +818,14 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 18;
         },
         0xE5 => {
-            trace_op(enable_trace, tracer, state, "PUSH HL", .{});
+            tracer(state, "PUSH HL", .{});
             pushStack(state,hi(cpu.hl));
             pushStack(state,lo(cpu.hl));
             state.cycle += 11;
         },
         0xE6 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "AND  {X:0>2}", .{byte});
+            tracer(state, "AND  {X:0>2}", .{byte});
             const res = cpu.a & byte;
             cpu.a = res;
             setFlags(cpu,res);
@@ -842,32 +833,32 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
             state.cycle += 7;
         },
         0xE9 => {
-            trace_op(enable_trace, tracer, state, "JP   (HL)", .{});
+            tracer(state, "JP   (HL)", .{});
             cpu.pc = cpu.hl;
             state.cycle += 5;
         },
         0xEB => {
-            trace_op(enable_trace, tracer, state, "EX   DE,HL", .{});
+            tracer(state, "EX   DE,HL", .{});
             const de = cpu.DE();
             cpu.setDE(cpu.hl);
             cpu.hl = de;
             state.cycle += 4;
         },
         0xF1 => {
-            trace_op(enable_trace, tracer, state, "POP  PSW", .{});
+            tracer(state, "POP  PSW", .{});
             cpu.restoreFlags(popStack(state));
             cpu.a = popStack(state);
             state.cycle += 10;
         },
         0xF5 => {
-            trace_op(enable_trace, tracer, state, "PUSH PSW", .{});
+            tracer(state, "PUSH PSW", .{});
             pushStack(state,cpu.a);
             pushStack(state,cpu.saveFlags());
             state.cycle += 11;
         },
         0xF6 => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "OR   {X:0>2}", .{byte});
+            tracer(state, "OR   {X:0>2}", .{byte});
             const res = cpu.a | byte;
             cpu.a = res;
             setFlags(cpu,res);
@@ -876,18 +867,18 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
         },
         0xFA => {
             const word = fetch16(state);
-            trace_op(enable_trace, tracer, state, "JP   MI,{X:0>4}", .{word});
+            tracer(state, "JP   MI,{X:0>4}", .{word});
             if (cpu.flagS == 1) { cpu.pc = word; }
             state.cycle += 10;
         },
         0xFB => {
-            trace_op(enable_trace, tracer, state, "EI", .{});
+            tracer(state, "EI", .{});
             state.interrupts_enabled = true;
             state.cycle += 4;
         },
         0xFE => {
             const byte = fetch(state);
-            trace_op(enable_trace, tracer, state, "CP   {X:0>2}", .{byte});
+            tracer(state, "CP   {X:0>2}", .{byte});
             _ = subtract_with_borrow(cpu,cpu.a,byte,0);
             state.cycle += 7;
         },
@@ -897,14 +888,7 @@ fn step_ct_op(comptime enable_trace: bool, tracer: Tracer, state : *State, compt
     }
 }
 
-fn trace_op(comptime enable_trace: bool, tracer: Tracer, state: *State, comptime fmt: []const u8, args: anytype) void {
-    if (enable_trace) {
-        tracer(state, fmt, args);
-    }
-}
-
 fn stop(state: *State, op: u8) void {
-    //printTraceLine(state);
     print("**opcode: {X:0>2}\n{d:8}  STOP", .{op,1 + state.icount});
     std.process.exit(0);
 }
