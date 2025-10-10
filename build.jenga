@@ -11,13 +11,15 @@ zig_installed_location: version
   echo ~/zig/zig-x86_64-linux-$(cat version) > zig_installed_location
 
 zig.sh: zig_installed_location mode
-  #echo  $(cat zig_installed_location)/zig build-exe -O $(cat mode) '"$@"' > zig.sh
   echo $(cat zig_installed_location)/zig build -Doptimize=$(cat mode) > zig.sh
-  echo cp zig-out/bin/invaders invaders >> zig.sh
   chmod +x zig.sh
 
-invaders: zig.sh build.zig invaders.zig wallclock.zig
+invaders: zig.sh build.zig src/main.zig src/wallclock.zig
+  mkdir src
+  mv *.zig src
+  mv src/build.zig .
   ./zig.sh
+  mv zig-out/bin/invaders .
 
 actual1.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test1 > actual1.out 2>&1 || true
