@@ -580,8 +580,14 @@ fn step_ct_op(comptime enable_trace: bool, state : *State, comptime op:u8) void 
             state.cycle += 10;
         },
         0x22 => {
-            const word = fetch16(state);
+            var word = fetch16(state);
             trace_op(enable_trace, state, "LD   ({X:0>4}),HL", .{word});
+            if (word >= mem_size) {
+                //word -= 0x2000; //ram mirror
+                const masked = word & 0x3fff;
+                print("OOB: {X:0>4} --> {X:0>4}\n",.{word,masked});
+                word = masked;
+            }
             state.mem[word] = lo(cpu.hl);
             state.mem[word+1] = hi(cpu.hl);
             state.cycle += 16;
@@ -1313,7 +1319,7 @@ pub fn graphics_main(state: *State) !void {
     var frame : usize = 0;
     const tic = mono_clock_ns();
     var max_cycles : u64 = 0;
-    const speed_up_factor : i32 = 1;
+    var speed_up_factor : i32 = 1;
 
     while (!quit) {
 
@@ -1353,8 +1359,7 @@ pub fn graphics_main(state: *State) !void {
             c.SDL_Delay(@intCast(pause_ms));
         }
 
-        // uncomment to go as fast as possible
-        //speed_up_factor = speed_up_factor + pause_ms; //increase or decrease or leave alone
+        speed_up_factor = speed_up_factor + pause_ms;
 
     }
     print("event loop ended\n",.{});
