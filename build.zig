@@ -9,9 +9,14 @@ pub fn build(b: *Build) void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            //.link_libc = true,
             .root_source_file = b.path("invaders.zig"),
         }),
+    });
+
+    exe.root_module.addAnonymousImport("wallclock", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("wallclock.zig"),
     });
 
     exe.linkSystemLibrary("SDL2");

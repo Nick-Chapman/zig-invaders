@@ -12,13 +12,7 @@ const clock_frequency = two_million; // of the 8080 CPU being simulated
 const billion = 1_000_000_000;
 const nanos_per_clock_cycle = billion / clock_frequency; //500
 
-fn mono_clock_ns() u64 { // do time computation in nano-seconds.
-    const linux = std.os.linux;
-    const clock_id = linux.clockid_t.MONOTONIC;
-    const ts : linux.timespec = std.posix.clock_gettime(clock_id) catch unreachable;
-    const n : i64 = ts.sec * billion + ts.nsec;
-    return @intCast(n);
-}
+const wallclock = @import("wallclock");
 
 const Mode = enum {
     test1,
@@ -91,7 +85,7 @@ pub fn main() !void {
         return;
     }
 
-    const tic = mono_clock_ns();
+    const tic = wallclock.time();
 
     const enable_trace = ! (mode == .speed);
 
@@ -101,7 +95,7 @@ pub fn main() !void {
         }
     }
 
-    const toc = mono_clock_ns();
+    const toc = wallclock.time();
 
     if (mode == .speed) {
         const cycles = state.cycle;
@@ -1317,15 +1311,14 @@ pub fn graphics_main(state: *State) !void {
     print("starting event loop\n",.{});
     var quit = false;
     var frame : usize = 0;
-    const tic = mono_clock_ns();
+    const tic = wallclock.time();
     var max_cycles : u64 = 0;
     var speed_up_factor : i32 = 1;
 
     while (!quit) {
 
-        var buf: [16]u8 = undefined;
-        //_ = try std.fmt.bufPrint(&buf, "x{d}\x00", .{speed_up_factor});
-        _ = try std.fmt.bufPrint(&buf, "frame: {d}\x00", .{frame});
+        var buf: [32]u8 = undefined;
+        _ = try std.fmt.bufPrint(&buf, "frame {d} @ x{d}\x00", .{frame,speed_up_factor});
         c.SDL_SetWindowTitle(screen,&buf);
 
         my_draw_picture(renderer,state);
@@ -1344,7 +1337,7 @@ pub fn graphics_main(state: *State) !void {
         max_cycles += cycles_per_display_frame;
         graphics_emulation_main_loop(state, max_cycles);
 
-        const toc = mono_clock_ns();
+        const toc = wallclock.time();
         const wall_ns : u64 = toc - tic;
         const wall_s = @as(f32,@floatFromInt(wall_ns)) / billion;
 
@@ -1359,7 +1352,7 @@ pub fn graphics_main(state: *State) !void {
             c.SDL_Delay(@intCast(pause_ms));
         }
 
-        speed_up_factor = speed_up_factor + pause_ms;
+        if (false) speed_up_factor = speed_up_factor + pause_ms;
 
     }
     print("event loop ended\n",.{});

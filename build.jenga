@@ -16,8 +16,8 @@ zig.sh: zig_installed_location mode
   echo cp zig-out/bin/invaders invaders >> zig.sh
   chmod +x zig.sh
 
-invaders: zig.sh build.zig invaders.zig
-  ./zig.sh #invaders.zig
+invaders: zig.sh build.zig invaders.zig wallclock.zig
+  ./zig.sh
 
 actual1.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test1 > actual1.out 2>&1 || true
