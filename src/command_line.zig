@@ -13,5 +13,5 @@ pub fn parse_mode() Mode {
     if (n_args == 0) return .graphics;
     if (n_args > 1) @panic("need at most one arg");
     const arg1 = std.mem.span(os.argv[1]);
-    return std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
+    return std.meta.stringToEnum(Mode, arg1) orelse @panic("mode");
 }
