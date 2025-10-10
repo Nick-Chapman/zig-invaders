@@ -23,7 +23,7 @@ pub fn main() !void {
     switch (enable_trace) {
         inline else => |enable_trace_ct| {
             while (state.icount <= state.config.max_steps) {
-                machine.step(enable_trace_ct, &state);
+                machine.step(enable_trace_ct, the_tracer, &state);
             }
         }
     }
@@ -181,7 +181,7 @@ fn graphics_main(state: *machine.State) !void {
 
         while (state.cycle <= max_cycles) {
             const enable_trace = false;
-            machine.step(enable_trace, state);
+            machine.step(enable_trace, the_tracer, state);
         }
 
         const toc = wallclock.time();
@@ -227,4 +227,58 @@ fn process_sym(sym: i32, buttons: *machine.Buttons, pressed: bool) void {
     if (sym == c.SDLK_RETURN) buttons.p1_fire = pressed;
     if (sym == 'z') buttons.p1_left = pressed;
     if (sym == 'x') buttons.p1_right = pressed;
+}
+
+fn the_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    if (state.icount >= state.config.trace_from
+            and state.icount % state.config.trace_every == 0) {
+        printTraceLine(state);
+        print(fmt,args);
+        if (state.config.trace_pixs) {
+            print(" #pixs:{d}\n",.{count_on_pixels(state.mem)});
+        } else {
+            print("\n",.{});
+        }
+    }
+}
+
+fn printTraceLine(state: *machine.State) void {
+    const cpu = state.cpu;
+    print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??{x} : ", .{
+        state.icount,
+        state.cycle,
+        cpu.pc,
+        cpu.a,
+        cpu.b,
+        cpu.c,
+        cpu.d,
+        cpu.e,
+        cpu.hl,
+        cpu.sp,
+        cpu.flagS,
+        cpu.flagZ,
+        cpu.flagY,
+    });
+}
+
+fn count_on_pixels(mem: []u8) u64 {
+    var res: u64 = 0;
+    for (0x2400..0x4000) |i| { //video ram
+        res += count_bits(mem[i]);
+    }
+    return res;
+}
+
+fn count_bits(byte: u8) u8 {
+    //TODO: comptime inline loop
+    var res : u8 = 0;
+    res += (if (byte & (1<<0) == 0) 0 else 1);
+    res += (if (byte & (1<<1) == 0) 0 else 1);
+    res += (if (byte & (1<<2) == 0) 0 else 1);
+    res += (if (byte & (1<<3) == 0) 0 else 1);
+    res += (if (byte & (1<<4) == 0) 0 else 1);
+    res += (if (byte & (1<<5) == 0) 0 else 1);
+    res += (if (byte & (1<<6) == 0) 0 else 1);
+    res += (if (byte & (1<<7) == 0) 0 else 1);
+    return res;
 }

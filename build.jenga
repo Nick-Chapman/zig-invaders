@@ -43,9 +43,9 @@ diff1.out: expected1.out actual1.out
   git diff --word-diff=color expected1.out actual1.out | tee diff1.out
   #git diff --color expected1.out actual1.out | tee diff1.out
 
-#diff2.out: expected2.out actual2.out
-#  git diff --word-diff=color expected2.out actual2.out | tee diff2.out
-#  #git diff --color expected2.out actual2.out | tee diff2.out
+diff2.out: expected2.out actual2.out
+  git diff --word-diff=color expected2.out actual2.out | tee diff2.out
+  #git diff --color expected2.out actual2.out | tee diff2.out
 
 speed.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders speed 2>&1 | tee speed.out
