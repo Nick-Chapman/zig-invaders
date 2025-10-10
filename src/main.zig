@@ -13,22 +13,7 @@ const billion = 1_000_000_000;
 const nanos_per_clock_cycle = billion / clock_frequency; //500
 
 const wallclock = @import("wallclock");
-
-const Mode = enum {
-    test1,
-    test2,
-    dev,
-    speed,
-    graphics,
-};
-
-fn parse_mode() Mode {
-    const n_args = os.argv.len - 1;
-    if (n_args == 0) return .graphics;
-    if (n_args > 1) @panic("need at most one arg");
-    const arg1 = std.mem.span(os.argv[1]);
-    return std.meta.stringToEnum(Mode,arg1) orelse @panic("mode");
-}
+const command_line = @import("command_line");
 
 const Config = struct {
     max_steps : u64,
@@ -37,7 +22,7 @@ const Config = struct {
     trace_pixs : bool,
 };
 
-fn configure(mode: Mode) Config {
+fn configure(mode: command_line.Mode) Config {
     return switch (mode) {
         .test1 => Config {
             .max_steps = 50_000,
@@ -73,7 +58,7 @@ fn configure(mode: Mode) Config {
 }
 
 pub fn main() !void {
-    const mode = parse_mode();
+    const mode = command_line.parse_mode();
     const config = configure(mode);
     //print("** Zig Invaders ** {any}\n",.{config});
     var mem = [_]u8{0} ** mem_size;
