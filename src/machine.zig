@@ -903,7 +903,7 @@ fn stop(state: *State, op: u8) void {
     std.process.exit(0);
 }
 
-const Cpu = struct {
+pub const Cpu = struct {
     pc: u16,
     sp: u16,
     hl: u16,
@@ -1024,6 +1024,7 @@ fn setFlags(cpu: *Cpu, byte: u8) void {
 
 fn doOut(state: *State, channel: u8, value: u8) void {
     switch (channel) {
+        0x01 => {}, //ignore output on port-1 for test0
         0x02 => state.shifter.offset = @truncate(value),
         0x03 => {}, //TODO sound
         0x04 => {

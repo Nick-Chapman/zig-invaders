@@ -13,6 +13,7 @@ pub fn main() !void {
     var state = machine.init_state(&mem);
 
     switch (mode) {
+        .test0 => try test0(),
         .test1 => trace_emulate(test1_tracer, &state, 50_000),
         .test2 => trace_emulate(test2_tracer, &state, 10_000_000),
 
@@ -263,5 +264,56 @@ fn count_bits(byte: u8) u8 {
     res += (if (byte & (1 << 5) == 0) 0 else 1);
     res += (if (byte & (1 << 6) == 0) 0 else 1);
     res += (if (byte & (1 << 7) == 0) 0 else 1);
+    return res;
+}
+
+fn test0() !void {
+    var mem = [_]u8{0} ** machine.mem_size;
+    _ = try std.fs.cwd().readFile("TST8080.COM", mem[0x100..]);
+    var state = machine.init_state(&mem);
+    state.cpu.pc = 0x100;
+    //mem[0] = 0xD3;
+    mem[5] = 0xD3;
+    mem[6] = 0x01;
+    mem[7] = 0xC9;
+    trace_emulate(test0_tracer, &state, 20);
+}
+
+fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
+    printTraceLine0(state);
+    print(fmt, args);
+    print("\n",.{});
+}
+
+fn printTraceLine0(state: *machine.State) void {
+    const cpu = state.cpu;
+    const mem = state.mem;
+    print("PC: {X:0>4}, AF: {X:0>2}{X:0>2}, BC: {X:0>2}{X:0>2}, DE: {X:0>2}{X:0>2}, HL: {X:0>4}, SP: {X:0>4}, CYC: {d:<7} {d} [{d:0>8}] {X:0>4} : {X:0>2} {X:0>2} {X:0>2}   ", .{
+        cpu.pc,
+        cpu.a,
+        flags_byte(cpu),
+        cpu.b,
+        cpu.c,
+        cpu.d,
+        cpu.e,
+        cpu.hl,
+        cpu.sp,
+        state.cycle,
+        state.icount,
+        state.cycle,
+        cpu.pc,
+        mem[cpu.pc-3],
+        mem[cpu.pc-2],
+        mem[cpu.pc-1],
+    });
+}
+
+fn flags_byte(cpu: machine.Cpu) u8 {
+    var res: u8 = 0;
+    if (cpu.flagS == 1) res |= 0x80;
+    if (cpu.flagZ == 1) res |= 0x40;
+    //if (cpu.flagP == 1) res |= 0x04;
+    res |= 0x02;
+    if (cpu.flagY == 1) res |= 0x01;
     return res;
 }

@@ -2,6 +2,7 @@ const std = @import("std");
 const os = std.os;
 
 pub const Mode = enum {
+    test0,
     test1,
     test2,
     speed,

@@ -21,11 +21,17 @@ invaders: zig.sh build.zig src/main.zig src/wallclock.zig src/command_line.zig s
   ./zig.sh
   mv zig-out/bin/invaders .
 
+actual0.out: invaders invaders.e invaders.f invaders.g invaders.h TST8080.COM
+  ./invaders test0 > actual0.out 2>&1 || true
+
 actual1.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test1 > actual1.out 2>&1 || true
 
 actual2.out: invaders invaders.e invaders.f invaders.g invaders.h
   ./invaders test2 > actual2.out 2>&1 || true
+
+actual0.size: actual0.out
+  echo '-'$(cat actual0.out | wc -l) > actual0.size
 
 actual1.size: actual1.out
   echo '-'$(cat actual1.out | wc -l) > actual1.size
@@ -33,11 +39,18 @@ actual1.size: actual1.out
 actual2.size: actual2.out
   echo '-'$(cat actual2.out | wc -l) > actual2.size
 
+expected0.out: actual0.size
+  cat ~/code/space-invaders/trace/test0.out | head $(cat actual0.size) > expected0.out
+
 expected1.out: actual1.size
   cat ~/code/space-invaders/trace/test1.out | head $(cat actual1.size) | sed 's/SZAPY:\(..\)../SZAPY:\1??/' > expected1.out
 
 expected2.out: actual2.size
   cat ~/code/space-invaders/trace/test2.out | sed 's/SZAPY:\(..\)../SZAPY:\1??/' | sed 's/ *#pixs/ #pixs/' | head $(cat actual2.size) > expected2.out
+
+#diff0.out: expected0.out actual0.out
+#  git diff --word-diff=color expected0.out actual0.out | tee diff0.out
+#  #git diff --color expected0.out actual0.out | tee diff0.out
 
 diff1.out: expected1.out actual1.out
   git diff --word-diff=color expected1.out actual1.out | tee diff1.out
