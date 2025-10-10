@@ -25,6 +25,12 @@ pub fn build(b: *Build) void {
         .root_source_file = b.path("src/command_line.zig"),
     });
 
+    exe.root_module.addAnonymousImport("machine", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("src/machine.zig"),
+    });
+
     exe.linkSystemLibrary("SDL2");
     exe.linkLibC();
     b.installArtifact(exe);
