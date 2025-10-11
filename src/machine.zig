@@ -97,7 +97,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x03 => {
             tracer(state, "INC  BC", .{});
-            cpu.setBC(1 + cpu.BC());
+            cpu.setBC(1 +% cpu.BC());
             state.cycle += 5;
         },
         0x04 => {
@@ -179,7 +179,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x13 => {
             tracer(state, "INC  DE", .{});
-            cpu.setDE(1 + cpu.DE());
+            cpu.setDE(1 +% cpu.DE());
             state.cycle += 5;
         },
         0x14 => {
@@ -214,7 +214,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x1B => {
             tracer(state, "DEC  DE", .{});
-            cpu.setDE(if (cpu.DE() == 0) 0xffff else cpu.DE() - 1);
+            cpu.setDE(cpu.DE() -% 1);
             state.cycle += 5;
         },
         0x1F => {
@@ -245,7 +245,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x23 => {
             tracer(state, "INC  HL", .{});
-            cpu.hl += 1;
+            cpu.hl +%= 1;
             state.cycle += 5;
         },
         0x26 => {
@@ -273,7 +273,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x2B => {
             tracer(state, "DEC  HL", .{});
-            cpu.hl = if (cpu.hl == 0) 0xffff else cpu.hl - 1;
+            cpu.hl = cpu.hl -% 1;
             state.cycle += 5;
         },
         0x2C => {
@@ -1010,11 +1010,11 @@ fn fetch(state: *State) u8 {
 }
 
 fn decrement(byte: u8) u8 {
-    return if (byte > 0) byte - 1 else 0xff;
+    return byte -% 1;
 }
 
 fn increment(byte: u8) u8 {
-    return if (byte < 0xFF) byte + 1 else 0x00;
+    return byte +% 1;
 }
 
 fn setFlags(cpu: *Cpu, byte: u8) void {
