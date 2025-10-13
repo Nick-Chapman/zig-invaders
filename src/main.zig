@@ -276,7 +276,7 @@ fn test0() !void {
     mem[5] = 0xD3;
     mem[6] = 0x01;
     mem[7] = 0xC9;
-    trace_emulate(test0_tracer, &state, 20);
+    trace_emulate(test0_tracer, &state, 12); //parity diff on 13; unknown opcode EA on 15
 }
 
 fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
@@ -287,8 +287,7 @@ fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) 
 
 fn printTraceLine0(state: *machine.State) void {
     const cpu = state.cpu;
-    const mem = state.mem;
-    print("PC: {X:0>4}, AF: {X:0>2}{X:0>2}, BC: {X:0>2}{X:0>2}, DE: {X:0>2}{X:0>2}, HL: {X:0>4}, SP: {X:0>4}, CYC: {d:<7} {d} [{d:0>8}] {X:0>4} : {X:0>2} {X:0>2} {X:0>2}   ", .{
+    print("PC: {X:0>4}, AF: {X:0>2}{X:0>2}, BC: {X:0>2}{X:0>2}, DE: {X:0>2}{X:0>2}, HL: {X:0>4}, SP: {X:0>4} {d:>7}  [{d:0>8}] {X:0>4} : ", .{
         cpu.pc,
         cpu.a,
         flags_byte(cpu),
@@ -298,13 +297,9 @@ fn printTraceLine0(state: *machine.State) void {
         cpu.e,
         cpu.hl,
         cpu.sp,
-        state.cycle,
         state.icount,
         state.cycle,
         cpu.pc,
-        mem[cpu.pc-3],
-        mem[cpu.pc-2],
-        mem[cpu.pc-1],
     });
 }
 
