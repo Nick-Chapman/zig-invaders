@@ -914,6 +914,7 @@ pub const Cpu = struct {
     e: u8,
     flagS: u1,
     flagZ: u1,
+    flagP: u1,
     flagY: u1,
     fn setBC(self: *Cpu, word: u16) void {
         self.b = hi(word);
@@ -933,12 +934,14 @@ pub const Cpu = struct {
         var res: u8 = 0;
         if (self.flagS == 1) res += 0x80;
         if (self.flagZ == 1) res += 0x40;
+        if (self.flagP == 1) res += 0x04;
         if (self.flagY == 1) res += 0x01;
         return res;
     }
     fn restoreFlags(self: *Cpu, byte: u8) void {
         self.flagS = if (byte & 0x80 == 0) 0 else 1;
         self.flagZ = if (byte & 0x40 == 0) 0 else 1;
+        self.flagP = if (byte & 0x04 == 0) 0 else 1;
         self.flagY = if (byte & 0x01 == 0) 0 else 1;
     }
     const init = Cpu{
@@ -952,6 +955,7 @@ pub const Cpu = struct {
         .e = 0,
         .flagS = 0,
         .flagZ = 0,
+        .flagP = 0,
         .flagY = 0,
     };
 };
@@ -1019,7 +1023,16 @@ fn increment(byte: u8) u8 {
 
 fn setFlags(cpu: *Cpu, byte: u8) void {
     cpu.flagS = if (byte & 0x80 == 0) 0 else 1;
+    cpu.flagP = parity(byte); //reduces speed-up approx x1700 to x1200
     cpu.flagZ = if (byte == 0) 1 else 0;
+}
+
+fn parity(byte: u8) u1 {
+    var count : usize = 0;
+    inline for (0..8) |i| {
+        if (byte & @as(u8,1) << i != 0) count += 1;
+    }
+    return if (count % 2 == 0) 1 else 0;
 }
 
 fn doOut(state: *State, channel: u8, value: u8) void {

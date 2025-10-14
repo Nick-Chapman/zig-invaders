@@ -43,10 +43,10 @@ expected0.out: actual0.size
   cat ~/code/space-invaders/trace/test0.out   | head $(cat actual0.size) > expected0.out
 
 expected1.out: actual1.size
-  cat ~/code/space-invaders/trace/test1.out | head $(cat actual1.size) | sed 's/SZAPY:\(..\)../SZAPY:\1??/' > expected1.out
+  cat ~/code/space-invaders/trace/test1.out | head $(cat actual1.size) | sed 's/SZAPY:\(..\)./SZAPY:\1?/' > expected1.out
 
 expected2.out: actual2.size
-  cat ~/code/space-invaders/trace/test2.out | sed 's/SZAPY:\(..\)../SZAPY:\1??/' | sed 's/ *#pixs/ #pixs/' | head $(cat actual2.size) > expected2.out
+  cat ~/code/space-invaders/trace/test2.out | sed 's/SZAPY:\(..\)./SZAPY:\1?/' | sed 's/ *#pixs/ #pixs/' | head $(cat actual2.size) > expected2.out
 
 diff0.out: expected0.out actual0.out
   git diff --word-diff=color expected0.out actual0.out | tee diff0.out

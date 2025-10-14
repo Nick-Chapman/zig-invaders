@@ -228,7 +228,7 @@ fn config_tracer(config: Config, state: *machine.State, comptime fmt: []const u8
 
 fn printTraceLine(state: *machine.State) void {
     const cpu = state.cpu;
-    print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}??{x} : ", .{
+    print("{d:8}  [{d:0>8}] PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}?{x}{x} : ", .{
         state.icount,
         state.cycle,
         cpu.pc,
@@ -241,6 +241,7 @@ fn printTraceLine(state: *machine.State) void {
         cpu.sp,
         cpu.flagS,
         cpu.flagZ,
+        cpu.flagP,
         cpu.flagY,
     });
 }
@@ -276,7 +277,7 @@ fn test0() !void {
     mem[5] = 0xD3;
     mem[6] = 0x01;
     mem[7] = 0xC9;
-    trace_emulate(test0_tracer, &state, 12); //parity diff on 13; unknown opcode EA on 15
+    trace_emulate(test0_tracer, &state, 14); //unknown opcode EA on 15
 }
 
 fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
@@ -307,7 +308,7 @@ fn flags_byte(cpu: machine.Cpu) u8 {
     var res: u8 = 0;
     if (cpu.flagS == 1) res |= 0x80;
     if (cpu.flagZ == 1) res |= 0x40;
-    //if (cpu.flagP == 1) res |= 0x04;
+    if (cpu.flagP == 1) res |= 0x04;
     res |= 0x02;
     if (cpu.flagY == 1) res |= 0x01;
     return res;
