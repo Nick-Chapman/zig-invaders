@@ -40,7 +40,7 @@ actual2.size: actual2.out
   echo '-'$(cat actual2.out | wc -l) > actual2.size
 
 expected0.out: actual0.size
-  cat ~/code/space-invaders/trace/test0.out | head $(cat actual0.size) | sed 's/AF: \(..\)../AF: \1??/' > expected0.out
+  cat ~/code/space-invaders/trace/test0.out | head $(cat actual0.size) | sed 's/SZAPY:\(..\)./SZAPY:\1?/' > expected0.out
 
 expected1.out: actual1.size
   cat ~/code/space-invaders/trace/test1.out | head $(cat actual1.size) | sed 's/SZAPY:\(..\)./SZAPY:\1?/' > expected1.out
