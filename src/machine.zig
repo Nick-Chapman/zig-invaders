@@ -1026,9 +1026,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xC0 => {
             op0(tracer, state, "RET  NZ");
             if (cpu.flagZ == 0) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1055,8 +1053,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xC4 => {
             const word = op2(tracer, state, "CALL NZ,");
             if (cpu.flagZ == 0) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1077,9 +1074,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xC8 => {
             op0(tracer, state, "RET  Z");
             if (cpu.flagZ == 1) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1087,9 +1082,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xC9 => {
             op0(tracer, state, "RET");
-            const b = popStack(state);
-            const a = popStack(state);
-            cpu.pc = hilo(a, b);
+            cpu.pc = popStack16(state);
             state.cycle += 10;
         },
         0xCA => {
@@ -1102,8 +1095,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xCC => {
             const word = op2(tracer, state, "CALL Z,");
             if (cpu.flagZ == 1) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1112,8 +1104,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xCD => {
             const word = op2(tracer, state, "CALL ");
-            pushStack(state, hi(cpu.pc)); // hi then lo
-            pushStack(state, lo(cpu.pc));
+            pushStack16(state, cpu.pc);
             cpu.pc = word;
             state.cycle += 17;
         },
@@ -1124,17 +1115,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xCF => {
             op0(tracer, state, "RST  1");
-            pushStack(state, hi(cpu.pc)); // hi then lo
-            pushStack(state, lo(cpu.pc));
+            pushStack16(state, cpu.pc);
             cpu.pc = 0x08;
             state.cycle += 4;
         },
         0xD0 => {
             op0(tracer, state, "RET  NC");
             if (cpu.flagY == 0) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1161,8 +1149,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xD4 => {
             const word = op2(tracer, state, "CALL NC,");
             if (cpu.flagY == 0) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1182,17 +1169,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xD7 => {
             op0(tracer, state, "RST  2");
-            pushStack(state, hi(cpu.pc)); // hi then lo
-            pushStack(state, lo(cpu.pc));
+            pushStack16(state, cpu.pc);
             cpu.pc = 0x10;
             state.cycle += 4;
         },
         0xD8 => {
             op0(tracer, state, "RET  CY");
             if (cpu.flagY == 1) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1213,8 +1197,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xDC => {
             const word = op2(tracer, state, "CALL CY,");
             if (cpu.flagY == 1) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1229,9 +1212,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xE0 => {
             op0(tracer, state, "RET  PO");
             if (cpu.flagP == 0) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1239,9 +1220,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xE1 => {
             op0(tracer, state, "POP  HL");
-            const b = popStack(state);
-            const a = popStack(state);
-            cpu.hl = hilo(a, b);
+            cpu.hl = popStack16(state);
             state.cycle += 10;
         },
         0xE2 => {
@@ -1263,8 +1242,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xE4 => {
             const word = op2(tracer, state, "CALL PO,");
             if (cpu.flagP == 0) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1273,8 +1251,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xE5 => {
             op0(tracer, state, "PUSH HL");
-            pushStack(state, hi(cpu.hl));
-            pushStack(state, lo(cpu.hl));
+            pushStack16(state, cpu.hl);
             state.cycle += 11;
         },
         0xE6 => {
@@ -1288,9 +1265,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xE8 => {
             op0(tracer, state, "RET  PE");
             if (cpu.flagP == 1) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1318,8 +1293,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xEC => {
             const word = op2(tracer, state, "CALL PE,");
             if (cpu.flagP == 1) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1337,9 +1311,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xF0 => {
             op0(tracer, state, "RET  P");
             if (cpu.flagS == 0) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1361,8 +1333,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xF4 => {
             const word = op2(tracer, state, "CALL P,");
             if (cpu.flagS == 0) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1386,9 +1357,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xF8 => {
             op0(tracer, state, "RET  MI");
             if (cpu.flagS == 1) {
-                const b = popStack(state);
-                const a = popStack(state);
-                cpu.pc = hilo(a, b);
+                cpu.pc = popStack16(state);
                 state.cycle += 11;
             } else {
                 state.cycle += 5;
@@ -1409,8 +1378,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xFC => {
             const word = op2(tracer, state, "CALL MI,");
             if (cpu.flagS == 1) {
-                pushStack(state, hi(cpu.pc)); // hi then lo
-                pushStack(state, lo(cpu.pc));
+                pushStack16(state, cpu.pc);
                 cpu.pc = word;
                 state.cycle += 17;
             } else {
@@ -1544,6 +1512,17 @@ fn hi(word: u16) u8 {
         .big => return byte_pair[0],
         .little => return byte_pair[1],
     }
+}
+
+fn pushStack16(state: *State, word: u16) void {
+    pushStack(state, hi(word)); // push hi;lo
+    pushStack(state, lo(word));
+}
+
+fn popStack16(state: *State) u16 {
+    const b = popStack(state); // pop lo;hi
+    const a = popStack(state);
+    return hilo(a, b);
 }
 
 fn pushStack(state: *State, byte: u8) void {
