@@ -94,6 +94,12 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.setBC(word);
             state.cycle += 10;
         },
+        0x02 => {
+            op0(tracer, state, "LD   (BC),A");
+            const addr = cpu.BC();
+            state.mem[addr] = cpu.a;
+            state.cycle += 7;
+        },
         0x03 => {
             op0(tracer, state, "INC  BC");
             cpu.setBC(1 +% cpu.BC());
@@ -131,9 +137,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 10;
         },
         0x0A => {
-            op0(tracer, state, "LD   A");
+            op0(tracer, state, "LD   A,(BC)");
             cpu.a = state.mem[cpu.BC()];
             state.cycle += 7;
+        },
+        0x0B => {
+            op0(tracer, state, "DEC  BC");
+            cpu.setBC(cpu.BC() -% 1);
+            state.cycle += 5;
         },
         0x0C => {
             op0(tracer, state, "INC  C");
@@ -244,7 +255,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 10;
         },
         0x22 => {
-            var word = op2g(tracer, state, "LD   ({X:0>4})");
+            var word = op2g(tracer, state, "LD   ({X:0>4}),HL");
             if (word >= mem_size) {
                 //word -= 0x2000; //ram mirror
                 const masked = word & 0x3fff;
@@ -291,7 +302,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 10;
         },
         0x2A => {
-            const word = op2(tracer, state, "LD   HL");
+            const word = op2g(tracer, state, "LD   HL,({X:0>4})");
             cpu.hl = hilo(state.mem[word + 1], state.mem[word]);
             state.cycle += 16;
         },
@@ -381,6 +392,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             const byte = op1(tracer, state, "LD   A,");
             cpu.a = byte;
             state.cycle += 7;
+        },
+        0x3F => {
+            op0(tracer, state, "CPC");
+            cpu.flagY = ~cpu.flagY;
+            state.cycle += 4;
         },
         0x41 => {
             op0(tracer, state, "LD   B,C");
@@ -734,6 +750,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             add_with_carry(cpu, lo(cpu.hl), cpu.flagY);
             state.cycle += 4;
         },
+        0x8E => {
+            op0(tracer, state, "ADC  (HL)");
+            add_with_carry(cpu, state.mem[cpu.hl], cpu.flagY);
+            state.cycle += 7;
+        },
         0x8F => {
             op0(tracer, state, "ADC  A");
             add_with_carry(cpu, cpu.a, cpu.flagY);
@@ -769,6 +790,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), 0);
             state.cycle += 4;
         },
+        0x96 => {
+            op0(tracer, state, "SUB  (HL)");
+            cpu.a = subtract_with_borrow(cpu, cpu.a, state.mem[cpu.hl], 0);
+            state.cycle += 7;
+        },
         0x97 => {
             op0(tracer, state, "SUB  A");
             cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.a, 0);
@@ -803,6 +829,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             op0(tracer, state, "SBC  L");
             cpu.a = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), cpu.flagY);
             state.cycle += 4;
+        },
+        0x9E => {
+            op0(tracer, state, "SBC  (HL)");
+            cpu.a = subtract_with_borrow(cpu, cpu.a, state.mem[cpu.hl], cpu.flagY);
+            state.cycle += 7;
         },
         0x9F => {
             op0(tracer, state, "SBC  A");
@@ -921,6 +952,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.flagY = 0;
             state.cycle += 4;
         },
+        0xAE => {
+            op0(tracer, state, "XOR  (HL)");
+            const res = cpu.a ^ state.mem[cpu.hl];
+            cpu.a = res;
+            setFlags(cpu, res);
+            cpu.flagY = 0;
+            state.cycle += 7;
+        },
         0xAF => {
             op0(tracer, state, "XOR  A");
             const res = cpu.a ^ cpu.a;
@@ -1016,6 +1055,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         0xBC => {
             op0(tracer, state, "CP   H");
             _ = subtract_with_borrow(cpu, cpu.a, hi(cpu.hl), 0);
+            state.cycle += 4;
+        },
+        0xBD => {
+            op0(tracer, state, "CP   L");
+            _ = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), 0);
             state.cycle += 4;
         },
         0xBE => {
