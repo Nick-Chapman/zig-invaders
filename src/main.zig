@@ -277,7 +277,7 @@ fn test0() !void {
     mem[5] = 0xD3;
     mem[6] = 0x01;
     mem[7] = 0xC9;
-    const max_steps = 200; //TODO (next) opcode 87 (ADD A) on step 201
+    const max_steps = 350;
     trace_emulate(test0_tracer, &state, max_steps);
 }
 
