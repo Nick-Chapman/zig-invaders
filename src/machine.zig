@@ -1351,16 +1351,16 @@ fn parity(byte: u8) u1 {
 
 fn doOut(state: *State, channel: u8, value: u8) void {
     switch (channel) {
-        0x01 => {}, //ignore output on port-1 for test0
-        0x02 => state.shifter.offset = @truncate(value),
-        0x03 => {}, //TODO sound
-        0x04 => {
+        1 => {}, //ignore output on port-1 for test0
+        2 => state.shifter.offset = @truncate(value),
+        3 => {}, //TODO sound
+        4 => {
             // looks like generated C code in space-invaders repo has these assignments swapped. bug?
             state.shifter.lo = state.shifter.hi;
             state.shifter.hi = value;
         },
-        0x05 => {}, //TODO sound
-        0x06 => {}, //watchdog; ignore
+        5 => {}, //TODO sound
+        6 => {}, //watchdog; ignore
         else => {
             print("**doOut: channel={X:0>2} value={X:0>2}\n", .{ channel, value });
             stop(state, 0xD3);
@@ -1371,7 +1371,7 @@ fn doOut(state: *State, channel: u8, value: u8) void {
 fn doIn(state: *State, channel: u8) u8 {
     const buttons = state.buttons;
     switch (channel) {
-        0x01 => {
+        1 => {
             var res: u8 = 0;
             if (!buttons.coin_deposit) res |= 0x1; //inverted logic for coin_deposit
             if (buttons.two_player_start) res |= 0x2;
@@ -1384,10 +1384,10 @@ fn doIn(state: *State, channel: u8) u8 {
             return res;
         },
         //TODO: input controls and dip switches on port 2
-        0x02 => {
+        2 => {
             return 0x00;
         },
-        0x03 => {
+        3 => {
             return (state.shifter.hi << state.shifter.offset) | ((state.shifter.lo >> (7 - state.shifter.offset)) >> 1);
         },
         else => {
