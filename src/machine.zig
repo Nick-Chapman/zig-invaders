@@ -86,7 +86,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
     const cpu = &state.cpu;
     switch (op) {
         0x00 => {
-            op0(tracer,state, "NOP");
+            op0(tracer, state, "NOP");
             state.cycle += 4;
         },
         0x01 => {
@@ -916,7 +916,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 11;
         },
         0xD6 => {
-            const byte = op1(tracer,state, "SUB  ");
+            const byte = op1(tracer, state, "SUB  ");
             cpu.a = subtract_with_borrow(cpu, cpu.a, byte, 0);
             state.cycle += 7;
         },
@@ -946,7 +946,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 10;
         },
         0xDB => {
-            const byte = op1(tracer,state, "IN   ");
+            const byte = op1(tracer, state, "IN   ");
             cpu.a = doIn(state, byte);
             state.cycle += 10;
         },
@@ -962,7 +962,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             }
         },
         0xDE => {
-            const byte = op1(tracer,state, "SBC  ");
+            const byte = op1(tracer, state, "SBC  ");
             cpu.a = subtract_with_borrow(cpu, cpu.a, byte, cpu.flagY);
             state.cycle += 7;
         },
@@ -1018,7 +1018,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 11;
         },
         0xE6 => {
-            const byte = op1(tracer,state, "AND  ");
+            const byte = op1(tracer, state, "AND  ");
             const res = cpu.a & byte;
             cpu.a = res;
             setFlags(cpu, res);
@@ -1056,7 +1056,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 4;
         },
         0xEC => {
-            const word = op2(tracer,state, "CALL PE,");
+            const word = op2(tracer, state, "CALL PE,");
             if (cpu.flagP == 1) {
                 pushStack(state, hi(cpu.pc)); // hi then lo
                 pushStack(state, lo(cpu.pc));
@@ -1067,7 +1067,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             }
         },
         0xEE => {
-            const byte = op1(tracer,state, "XOR  ");
+            const byte = op1(tracer, state, "XOR  ");
             const res = cpu.a ^ byte;
             cpu.a = res;
             setFlags(cpu, res);
@@ -1116,7 +1116,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 11;
         },
         0xF6 => {
-            const byte = op1(tracer,state, "OR   ");
+            const byte = op1(tracer, state, "OR   ");
             const res = cpu.a | byte;
             cpu.a = res;
             setFlags(cpu, res);
@@ -1142,12 +1142,12 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.cycle += 10;
         },
         0xFB => {
-            op0(tracer,state,"EI");
+            op0(tracer, state, "EI");
             state.interrupts_enabled = true;
             state.cycle += 4;
         },
         0xFC => {
-            const word = op2(tracer,state,"CALL MI,");
+            const word = op2(tracer, state, "CALL MI,");
             if (cpu.flagS == 1) {
                 pushStack(state, hi(cpu.pc)); // hi then lo
                 pushStack(state, lo(cpu.pc));
@@ -1158,7 +1158,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             }
         },
         0xFE => {
-            const byte = op1(tracer,state,"CP   ");
+            const byte = op1(tracer, state, "CP   ");
             _ = subtract_with_borrow(cpu, cpu.a, byte, 0);
             state.cycle += 7;
         },
@@ -1173,7 +1173,7 @@ fn op0(comptime tracer: Tracer, state: *State, comptime op: []const u8) void {
 }
 
 fn op1(comptime tracer: Tracer, state: *State, comptime op: []const u8) u8 {
-    return op1g(tracer,state,op ++ "{X:0>2}");
+    return op1g(tracer, state, op ++ "{X:0>2}");
 }
 
 fn op1g(comptime tracer: Tracer, state: *State, comptime op: []const u8) u8 {
@@ -1183,7 +1183,7 @@ fn op1g(comptime tracer: Tracer, state: *State, comptime op: []const u8) u8 {
 }
 
 fn op2(comptime tracer: Tracer, state: *State, comptime op: []const u8) u16 {
-    return op2g(tracer,state,op ++ "{X:0>4}");
+    return op2g(tracer, state, op ++ "{X:0>4}");
 }
 
 fn op2g(comptime tracer: Tracer, state: *State, comptime op: []const u8) u16 {
@@ -1322,9 +1322,9 @@ fn setFlags(cpu: *Cpu, byte: u8) void {
 }
 
 fn parity(byte: u8) u1 {
-    var count : usize = 0;
+    var count: usize = 0;
     inline for (0..8) |i| {
-        if (byte & @as(u8,1) << i != 0) count += 1;
+        if (byte & @as(u8, 1) << i != 0) count += 1;
     }
     return if (count % 2 == 0) 1 else 0;
 }

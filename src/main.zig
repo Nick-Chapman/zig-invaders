@@ -284,7 +284,7 @@ fn test0() !void {
 fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
     printTraceLine0(state);
     print(fmt, args);
-    print("\n",.{});
+    print("\n", .{});
 }
 
 fn printTraceLine0(state: *machine.State) void {
