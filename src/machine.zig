@@ -37,6 +37,8 @@ pub const State = struct {
     interrupts_enabled: bool,
     next_wakeup: u64,
     next_interrupt_op: u8,
+    port3: u8,
+    port5: u8,
 };
 
 pub fn init_state(mem: []u8) State {
@@ -50,6 +52,8 @@ pub fn init_state(mem: []u8) State {
         .interrupts_enabled = false,
         .next_wakeup = half_frame_cycles,
         .next_interrupt_op = first_interrupt_op,
+        .port3 = 0,
+        .port5 = 0,
     };
     return state;
 }
@@ -292,7 +296,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x27 => {
             op0(tracer, state, "DAA");
-            print("DAA\n", .{});
+            //print("DAA\n", .{});
             //TODO
             state.cycle += 4;
         },
@@ -1618,13 +1622,12 @@ fn doOut(state: *State, channel: u8, value: u8) void {
     switch (channel) {
         1 => {}, //ignore output on port-1 for test0
         2 => state.shifter.offset = @truncate(value),
-        3 => {}, //TODO sound
+        3 => state.port3 = value,
         4 => {
-            // looks like generated C code in space-invaders repo has these assignments swapped. bug?
             state.shifter.lo = state.shifter.hi;
             state.shifter.hi = value;
         },
-        5 => {}, //TODO sound
+        5 => state.port5 = value,
         6 => {}, //watchdog; ignore
         else => {
             print("**doOut: channel={X:0>2} value={X:0>2}\n", .{ channel, value });

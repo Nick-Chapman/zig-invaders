@@ -55,9 +55,8 @@ fn load_roms(mem: []u8) !void {
     _ = try dir.readFile("invaders.e", mem[3 * rom_size ..]);
 }
 
-const c = @cImport({
-    @cInclude("SDL2/SDL.h");
-});
+const c = @cImport({@cInclude("SDL2/SDL.h");});
+const mix = @cImport({@cInclude("SDL2/SDL_mixer.h");});
 
 const render_scale = 3;
 
@@ -91,7 +90,7 @@ fn draw_screen(renderer: *c.SDL_Renderer, state: *machine.State) void {
 }
 
 fn graphics_main(state: *machine.State) !void {
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
+    if (c.SDL_Init(c.SDL_INIT_EVERYTHING) != 0) {
         c.SDL_Log("Unable to initialize SDL: %s", c.SDL_GetError());
         return error.SDLInitializationFailed;
     }
@@ -100,7 +99,9 @@ fn graphics_main(state: *machine.State) !void {
     const screen_w = render_scale * pixel_w;
     const screen_h = render_scale * pixel_h;
 
-    const screen = c.SDL_CreateWindow("Soon to be Space Invaders", 200, //c.SDL_WINDOWPOS_UNDEFINED,
+    const screen = c.SDL_CreateWindow(
+        "Space Invaders",
+        500, //c.SDL_WINDOWPOS_UNDEFINED,
         50, //c.SDL_WINDOWPOS_UNDEFINED,
         screen_w, screen_h, c.SDL_WINDOW_OPENGL) orelse {
         c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
@@ -114,6 +115,8 @@ fn graphics_main(state: *machine.State) !void {
     };
     defer c.SDL_DestroyRenderer(renderer);
 
+    const sounds = init_sounds();
+
     print("starting event loop\n", .{});
     var quit = false;
     var frame: usize = 0;
@@ -122,9 +125,10 @@ fn graphics_main(state: *machine.State) !void {
     var speed_up_factor: i32 = 1;
 
     while (!quit) {
-        var buf: [32]u8 = undefined;
-        _ = try std.fmt.bufPrint(&buf, "frame {d} @ x{d}\x00", .{ frame, speed_up_factor });
-        c.SDL_SetWindowTitle(screen, &buf);
+        //print("{d} P3={X:0>2} P5={X:0>2}\n",.{frame, state.port3, state.port5});
+        //var buf: [32]u8 = undefined;
+        //_ = try std.fmt.bufPrint(&buf, "frame {d} @ x{d}\x00", .{ frame, speed_up_factor });
+        //c.SDL_SetWindowTitle(screen, &buf);
         draw_screen(renderer, state);
         c.SDL_RenderPresent(renderer);
         var event: c.SDL_Event = undefined;
@@ -136,8 +140,26 @@ fn graphics_main(state: *machine.State) !void {
         frame += 1;
         max_cycles += cycles_per_display_frame;
 
+        const last_port3: u8 = state.port3;
+        const last_port5: u8 = state.port5;
+
         while (state.cycle <= max_cycles) {
             machine.step(null_tracer, state);
+        }
+
+        if (state.port3 != last_port3) {
+            if (last_port3 & 1 == 0 and state.port3 & 1 != 0) play(sounds.ufo);
+            if (last_port3 & 2 == 0 and state.port3 & 2 != 0) play(sounds.shot);
+            if (last_port3 & 4 == 0 and state.port3 & 4 != 0) play(sounds.player_die);
+            if (last_port3 & 8 == 0 and state.port3 & 8 != 0) play(sounds.invader_die);
+            if (last_port3 & 16 == 0 and state.port3 & 16 != 0) play(sounds.extra_life);
+        }
+        if (state.port5 != last_port5) {
+            if (last_port5 & 1 == 0 and state.port5 & 1 != 0) play(sounds.fleet1);
+            if (last_port5 & 2 == 0 and state.port5 & 2 != 0) play(sounds.fleet2);
+            if (last_port5 & 4 == 0 and state.port5 & 4 != 0) play(sounds.fleet3);
+            if (last_port5 & 8 == 0 and state.port5 & 8 != 0) play(sounds.fleet4);
+            if (last_port5 & 16 == 0 and state.port5 & 16 != 0) play(sounds.ufo_hit);
         }
 
         const toc = wallclock.time();
@@ -183,6 +205,56 @@ fn process_sym(sym: i32, buttons: *machine.Buttons, pressed: bool) void {
     if (sym == 'z') buttons.p1_left = pressed;
     if (sym == 'x') buttons.p1_right = pressed;
 }
+
+const Chunk = [*c]mix.Mix_Chunk;
+
+fn play(sound: Chunk) void {
+    _ = mix.Mix_PlayChannel(-1, sound, 0);
+}
+
+const Sounds = struct {
+    ufo : Chunk,
+    shot : Chunk,
+    invader_die : Chunk,
+    player_die : Chunk,
+    extra_life : Chunk,
+    fleet1 : Chunk,
+    fleet2 : Chunk,
+    fleet3 : Chunk,
+    fleet4 : Chunk,
+    ufo_hit : Chunk,
+};
+
+fn init_sounds() Sounds {
+    //print("loading sounds\n", .{});
+    const frequency = 44100;
+    const format = mix.AUDIO_U16LSB;
+    const channels = 1;
+    const chunksize = 1024;
+    _ = mix.Mix_OpenAudio(frequency,format,channels,chunksize);
+    return Sounds {
+        .ufo = load_sound("sounds/Ufo.wav"),
+        .shot = load_sound("sounds/Shot.wav"),
+        .invader_die = load_sound("sounds/InvaderDie.wav"),
+        .player_die = load_sound("sounds/PlayerDie.wav"),
+        .extra_life = load_sound("sounds/ExtraLife.wav"),
+        .fleet1 = load_sound("sounds/FleetMovement1.wav"),
+        .fleet2 = load_sound("sounds/FleetMovement2.wav"),
+        .fleet3 = load_sound("sounds/FleetMovement3.wav"),
+        .fleet4 = load_sound("sounds/FleetMovement4.wav"),
+        .ufo_hit = load_sound("sounds/UfoHit.wav"),
+    };
+}
+
+fn load_sound(filename : [*c]const u8) Chunk {
+    const chunk = mix.Mix_LoadWAV(filename);
+    if (chunk != 0) {
+        return chunk;
+    }
+    print("failed to load sound file: {s}\n",.{filename});
+    unreachable; // TODO: use idomatic zig errors
+}
+
 
 fn null_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
     _ = state;

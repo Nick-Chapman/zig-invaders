@@ -32,6 +32,7 @@ pub fn build(b: *Build) void {
     });
 
     exe.linkSystemLibrary("SDL2");
+    exe.linkSystemLibrary("SDL2_mixer");
     exe.linkLibC();
     b.installArtifact(exe);
 
