@@ -296,8 +296,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x27 => {
             op0(tracer, state, "DAA");
-            print("DAA\n", .{});
-            //TODO
+            decimal_adjust(cpu);
             state.cycle += 4;
         },
         0x29 => {
@@ -1700,4 +1699,32 @@ fn increment(cpu: *Cpu, byte: u8) u8 {
     const res = gen_add_with_carry(cpu, byte, 0x01, 0);
     cpu.flagY = keepY;
     return res;
+}
+
+fn decimal_adjust(cpu: *Cpu) void {
+    const byteIn: u8 = cpu.a;
+    const auxIn: u1 = cpu.flagA;
+    const cin: u1 = cpu.flagY;
+
+    const loIn: u8 = byteIn & 0xF;
+    const loNeedsAdjust: bool = (loIn > 9) or (auxIn == 1);
+    const loAdjust: u8 = if (loNeedsAdjust) loIn + 6 else loIn;
+
+    const auxOut: u1 = if ((loAdjust & 0x10) != 0) 1 else 0;
+
+    const hiIn: u8 = (byteIn >> 4) + auxOut;
+    const hiNeedsAdjust: bool = (hiIn > 9) or (cin == 1);
+    const hiAdjust: u8 = if (hiNeedsAdjust) hiIn + 6 else hiIn;
+
+    const cout0: u1 = if ((hiAdjust & 0x10) != 0) 1 else 0;
+
+    const cout: u1 = cout0 | cin;
+    const loTick: u8 = loAdjust & 0xF;
+    const hiTick: u8 = hiAdjust << 4;
+    const byteOut: u8 = hiTick | loTick;
+
+    cpu.a = byteOut;
+    setFlags(cpu, byteOut);
+    cpu.flagY = cout;
+    cpu.flagA = auxOut;
 }

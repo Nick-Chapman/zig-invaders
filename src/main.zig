@@ -346,11 +346,10 @@ fn test0() !void {
     _ = try std.fs.cwd().readFile("TST8080.COM", mem[0x100..]);
     var state = machine.init_state(&mem);
     state.cpu.pc = 0x100;
-    //mem[0] = 0xD3;
     mem[5] = 0xD3;
     mem[6] = 0x01;
     mem[7] = 0xC9;
-    const max_steps = 519; //DAA at 520. DAA at 525 goes wrong
+    const max_steps = 551; //step 552 is unknown op 0x17 RAL
     trace_emulate(test0_tracer, &state, max_steps);
 }
 
