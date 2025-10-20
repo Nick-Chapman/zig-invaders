@@ -147,12 +147,17 @@ fn graphics_main(state: *machine.State) !void {
         //var buf: [32]u8 = undefined;
         //_ = try std.fmt.bufPrint(&buf, "frame {d} @ x{d}\x00", .{ frame, speed_up_factor });
         //c.SDL_SetWindowTitle(screen, &buf);
+
+        var buf: [32]u8 = undefined;
+        _ = try std.fmt.bufPrint(&buf, "Space Invaders X{d}\x00", .{ speed_up_factor });
+        c.SDL_SetWindowTitle(screen, &buf);
+
         draw_screen(renderer, state);
         c.SDL_RenderPresent(renderer);
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             //print("{any}\n",.{event});
-            process_event(event, &state.buttons, &quit);
+            process_event(event, &state.buttons, &quit, &speed_up_factor);
         }
         const cycles_per_display_frame = if (speed_up_factor < 0) 0 else 2 * machine.half_frame_cycles * @as(u32, @intCast(speed_up_factor));
         frame += 1;
@@ -196,12 +201,14 @@ fn graphics_main(state: *machine.State) !void {
     print("event loop ended\n", .{});
 }
 
-fn process_event(event: c.SDL_Event, buttons: *machine.Buttons, quit: *bool) void {
+fn process_event(event: c.SDL_Event, buttons: *machine.Buttons, quit: *bool, speed_up_factor: *i32) void {
     const sym = event.key.keysym.sym;
     switch (event.type) {
         c.SDL_KEYDOWN => {
             //print("down:sym={d}\n",.{sym});
             if (sym == c.SDLK_ESCAPE) quit.* = true;
+            if (sym == c.SDLK_UP) speed_up_factor.* += 1;
+            if (sym == c.SDLK_DOWN and speed_up_factor.* > 1) speed_up_factor.* -= 1;
             process_sym(sym, buttons, true);
         },
         c.SDL_KEYUP => {
