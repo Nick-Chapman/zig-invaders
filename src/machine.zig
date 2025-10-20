@@ -16,6 +16,10 @@ pub const Buttons = struct {
     p1_left: bool,
     p1_right: bool,
     p1_fire: bool,
+    tilt: bool,
+    p2_left: bool,
+    p2_right: bool,
+    p2_fire: bool,
 
     pub const init = Buttons{
         .coin_deposit = false,
@@ -24,6 +28,10 @@ pub const Buttons = struct {
         .p1_left = false,
         .p1_right = false,
         .p1_fire = false,
+        .tilt = false,
+        .p2_left = false,
+        .p2_right = false,
+        .p2_fire = false,
     };
 };
 
@@ -1667,7 +1675,12 @@ fn doIn(state: *State, channel: u8) u8 {
         },
         //TODO: input controls and dip switches on port 2
         2 => {
-            return 0x00;
+            var res: u8 = 0;
+            if (buttons.tilt) res |= 0x04;
+            if (buttons.p2_fire) res |= 0x10;
+            if (buttons.p2_left) res |= 0x20;
+            if (buttons.p2_right) res |= 0x40;
+            return res;
         },
         3 => {
             return (state.shifter.hi << state.shifter.offset) | ((state.shifter.lo >> (7 - state.shifter.offset)) >> 1);

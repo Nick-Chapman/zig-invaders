@@ -229,6 +229,10 @@ fn process_sym(sym: i32, buttons: *machine.Buttons, pressed: bool) void {
     if (sym == c.SDLK_RETURN) buttons.p1_fire = pressed;
     if (sym == 'z') buttons.p1_left = pressed;
     if (sym == 'x') buttons.p1_right = pressed;
+    if (sym == c.SDLK_TAB) buttons.tilt = pressed;
+    if (sym == c.SDLK_BACKSPACE) buttons.p2_fire = pressed;
+    if (sym == 'a') buttons.p2_left = pressed;
+    if (sym == 's') buttons.p2_right = pressed;
 }
 
 const Chunk = [*c]mix.Mix_Chunk;
