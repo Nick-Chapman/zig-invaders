@@ -212,6 +212,13 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.d = byte;
             state.cycle += 7;
         },
+        0x17 => {
+            op0(tracer, state, "RAL");
+            const shunted: u1 = @truncate(cpu.a >> 7);
+            cpu.a = cpu.flagY | cpu.a << 1;
+            cpu.flagY = shunted;
+            state.cycle += 4;
+        },
         0x19 => {
             op0(tracer, state, "ADD  HL,DE");
             dad(cpu, cpu.DE());
@@ -348,6 +355,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             state.mem[word] = cpu.a;
             state.cycle += 13;
         },
+        0x33 => {
+            op0(tracer, state, "INC  SP");
+            cpu.sp +%= 1;
+            state.cycle += 5;
+        },
         0x34 => {
             op0(tracer, state, "INC  (HL)");
             const byte = increment(cpu, state.mem[cpu.hl]);
@@ -372,10 +384,20 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.flagY = 1;
             state.cycle += 4;
         },
+        0x39 => {
+            op0(tracer, state, "ADD  HL,SP");
+            dad(cpu, cpu.sp);
+            state.cycle += 10;
+        },
         0x3A => {
             const word = op2g(tracer, state, "LD   A,({X:0>4})");
             cpu.a = state.mem[word];
             state.cycle += 13;
+        },
+        0x3B => {
+            op0(tracer, state, "DEC  SP");
+            cpu.sp -%= 1;
+            state.cycle += 5;
         },
         0x3C => {
             op0(tracer, state, "INC  A");
@@ -1401,6 +1423,11 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
                 state.cycle += 5;
             }
         },
+        0xF9 => {
+            op0(tracer, state, "LD   SP,HL");
+            cpu.sp = cpu.hl;
+            state.cycle += 5;
+        },
         0xFA => {
             const word = op2(tracer, state, "JP   MI,");
             if (cpu.flagS == 1) {
@@ -1606,6 +1633,7 @@ fn parity(byte: u8) u1 {
 
 fn doOut(state: *State, channel: u8, value: u8) void {
     switch (channel) {
+        0 => {}, //ignore output on port-0 for test0
         1 => {}, //ignore output on port-1 for test0
         2 => state.shifter.offset = @truncate(value),
         3 => state.port3 = value,
