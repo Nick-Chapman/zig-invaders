@@ -1,13 +1,13 @@
 const std = @import("std");
+const os = std.os;
 const debug = std.debug;
 const print = debug.print;
 const billion = 1_000_000_000;
 const wallclock = @import("wallclock");
-const command_line = @import("command_line");
 const machine = @import("machine");
 
 pub fn main() !void {
-    const mode = command_line.parse_mode();
+    const mode = parse_mode();
     var mem = [_]u8{0} ** machine.mem_size;
     try load_roms(&mem);
     var state = machine.init_state(&mem);
@@ -37,6 +37,22 @@ pub fn main() !void {
             });
         },
     }
+}
+
+pub const Mode = enum {
+    test0,
+    test1,
+    test2,
+    speed,
+    graphics,
+};
+
+pub fn parse_mode() Mode {
+    const n_args = os.argv.len - 1;
+    if (n_args == 0) return .graphics;
+    if (n_args > 1) @panic("need at most one arg");
+    const arg1 = std.mem.span(os.argv[1]);
+    return std.meta.stringToEnum(Mode, arg1) orelse @panic("mode");
 }
 
 fn trace_emulate(tracer: machine.Tracer, state: *machine.State, max_steps: u64) void {

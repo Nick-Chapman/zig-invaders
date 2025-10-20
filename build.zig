@@ -19,12 +19,6 @@ pub fn build(b: *Build) void {
         .root_source_file = b.path("src/wallclock.zig"),
     });
 
-    exe.root_module.addAnonymousImport("command_line", .{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/command_line.zig"),
-    });
-
     exe.root_module.addAnonymousImport("machine", .{
         .target = target,
         .optimize = optimize,

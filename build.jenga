@@ -14,7 +14,7 @@ zig.sh: zig_installed_location mode
   echo $(cat zig_installed_location)/zig build -Doptimize=$(cat mode) > zig.sh
   chmod +x zig.sh
 
-invaders: zig.sh build.zig src/main.zig src/wallclock.zig src/command_line.zig src/machine.zig
+invaders: zig.sh build.zig src/main.zig src/wallclock.zig src/machine.zig
   mkdir src
   mv *.zig src
   mv src/build.zig .
