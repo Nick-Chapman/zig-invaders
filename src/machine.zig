@@ -1706,21 +1706,19 @@ fn decimal_adjust(cpu: *Cpu) void {
     const auxIn: u1 = cpu.flagA;
     const cin: u1 = cpu.flagY;
 
-    const loIn: u8 = byteIn & 0xF;
+    const loIn: u4 = @truncate(byteIn);
     const loNeedsAdjust: bool = (loIn > 9) or (auxIn == 1);
-    const loAdjust: u8 = if (loNeedsAdjust) loIn + 6 else loIn;
+    const loAdjust: u5 = if (loNeedsAdjust) @as(u5, loIn) + 6 else loIn;
+    const auxOut: u1 = @truncate(loAdjust >> 4);
 
-    const auxOut: u1 = if ((loAdjust & 0x10) != 0) 1 else 0;
-
-    const hiIn: u8 = (byteIn >> 4) + auxOut;
+    const hiIn: u4 = @as(u4, @truncate(byteIn >> 4)) +% auxOut;
     const hiNeedsAdjust: bool = (hiIn > 9) or (cin == 1);
-    const hiAdjust: u8 = if (hiNeedsAdjust) hiIn + 6 else hiIn;
-
-    const cout0: u1 = if ((hiAdjust & 0x10) != 0) 1 else 0;
+    const hiAdjust: u5 = if (hiNeedsAdjust) @as(u5, hiIn) + 6 else hiIn;
+    const cout0: u1 = @truncate(hiAdjust >> 4);
 
     const cout: u1 = cout0 | cin;
     const loTick: u8 = loAdjust & 0xF;
-    const hiTick: u8 = hiAdjust << 4;
+    const hiTick: u8 = @as(u8, hiAdjust) << 4;
     const byteOut: u8 = hiTick | loTick;
 
     cpu.a = byteOut;
