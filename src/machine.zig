@@ -111,14 +111,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x04 => {
             op0(tracer, state, "INC  B");
-            const byte = increment(cpu.b);
+            const byte = increment(cpu, cpu.b);
             cpu.b = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x05 => {
             op0(tracer, state, "DEC  B");
-            const byte = decrement(cpu.b);
+            const byte = decrement(cpu, cpu.b);
             cpu.b = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -152,14 +152,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x0C => {
             op0(tracer, state, "INC  C");
-            const byte = increment(cpu.c);
+            const byte = increment(cpu, cpu.c);
             cpu.c = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x0D => {
             op0(tracer, state, "DEC  C");
-            const byte = decrement(cpu.c);
+            const byte = decrement(cpu, cpu.c);
             cpu.c = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -195,14 +195,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x14 => {
             op0(tracer, state, "INC  D");
-            const byte = increment(cpu.d);
+            const byte = increment(cpu, cpu.d);
             cpu.d = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x15 => {
             op0(tracer, state, "DEC  D");
-            const byte = decrement(cpu.d);
+            const byte = decrement(cpu, cpu.d);
             cpu.d = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -229,14 +229,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x1C => {
             op0(tracer, state, "INC  E");
-            const byte = increment(cpu.e);
+            const byte = increment(cpu, cpu.e);
             cpu.e = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x1D => {
             op0(tracer, state, "DEC  E");
-            const byte = decrement(cpu.e);
+            const byte = decrement(cpu, cpu.e);
             cpu.e = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -277,14 +277,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x24 => {
             op0(tracer, state, "INC  H");
-            const byte = increment(hi(cpu.hl));
+            const byte = increment(cpu, hi(cpu.hl));
             cpu.hl = hilo(byte, lo(cpu.hl));
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x25 => {
             op0(tracer, state, "DEC  H");
-            const byte = decrement(hi(cpu.hl));
+            const byte = decrement(cpu, hi(cpu.hl));
             cpu.hl = hilo(byte, lo(cpu.hl));
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -296,7 +296,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x27 => {
             op0(tracer, state, "DAA");
-            //print("DAA\n", .{});
+            print("DAA\n", .{});
             //TODO
             state.cycle += 4;
         },
@@ -317,14 +317,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x2C => {
             op0(tracer, state, "INC  L");
-            const byte = increment(lo(cpu.hl));
+            const byte = increment(cpu, lo(cpu.hl));
             cpu.hl = hilo(hi(cpu.hl), byte);
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x2D => {
             op0(tracer, state, "DEC  L");
-            const byte = decrement(lo(cpu.hl));
+            const byte = decrement(cpu, lo(cpu.hl));
             cpu.hl = hilo(hi(cpu.hl), byte);
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -351,14 +351,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x34 => {
             op0(tracer, state, "INC  (HL)");
-            const byte = increment(state.mem[cpu.hl]);
+            const byte = increment(cpu, state.mem[cpu.hl]);
             state.mem[cpu.hl] = byte;
             setFlags(cpu, byte);
             state.cycle += 10;
         },
         0x35 => {
             op0(tracer, state, "DEC  (HL)");
-            const byte = decrement(state.mem[cpu.hl]);
+            const byte = decrement(cpu, state.mem[cpu.hl]);
             state.mem[cpu.hl] = byte;
             setFlags(cpu, byte);
             state.cycle += 10;
@@ -380,14 +380,14 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x3C => {
             op0(tracer, state, "INC  A");
-            const byte = increment(cpu.a);
+            const byte = increment(cpu, cpu.a);
             cpu.a = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
         },
         0x3D => {
             op0(tracer, state, "DEC  A");
-            const byte = decrement(cpu.a);
+            const byte = decrement(cpu, cpu.a);
             cpu.a = byte;
             setFlags(cpu, byte);
             state.cycle += 5;
@@ -686,226 +686,202 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0x80 => {
             op0(tracer, state, "ADD  B");
-            add_with_carry(cpu, cpu.b, 0);
+            cpu.a = add_with_carry(cpu, cpu.b, 0);
             state.cycle += 4;
         },
         0x81 => {
             op0(tracer, state, "ADD  C");
-            add_with_carry(cpu, cpu.c, 0);
+            cpu.a = add_with_carry(cpu, cpu.c, 0);
             state.cycle += 4;
         },
         0x82 => {
             op0(tracer, state, "ADD  D");
-            add_with_carry(cpu, cpu.d, 0);
+            cpu.a = add_with_carry(cpu, cpu.d, 0);
             state.cycle += 4;
         },
         0x83 => {
             op0(tracer, state, "ADD  E");
-            add_with_carry(cpu, cpu.e, 0);
+            cpu.a = add_with_carry(cpu, cpu.e, 0);
             state.cycle += 4;
         },
         0x84 => {
             op0(tracer, state, "ADD  H");
-            add_with_carry(cpu, hi(cpu.hl), 0);
+            cpu.a = add_with_carry(cpu, hi(cpu.hl), 0);
             state.cycle += 4;
         },
         0x85 => {
             op0(tracer, state, "ADD  L");
-            add_with_carry(cpu, lo(cpu.hl), 0);
+            cpu.a = add_with_carry(cpu, lo(cpu.hl), 0);
             state.cycle += 4;
         },
         0x86 => {
             op0(tracer, state, "ADD  (HL)");
-            add_with_carry(cpu, state.mem[cpu.hl], 0);
+            cpu.a = add_with_carry(cpu, state.mem[cpu.hl], 0);
             state.cycle += 7;
         },
         0x87 => {
             op0(tracer, state, "ADD  A");
-            add_with_carry(cpu, cpu.a, 0);
+            cpu.a = add_with_carry(cpu, cpu.a, 0);
             state.cycle += 4;
         },
         0x88 => {
             op0(tracer, state, "ADC  B");
-            add_with_carry(cpu, cpu.b, cpu.flagY);
+            cpu.a = add_with_carry(cpu, cpu.b, cpu.flagY);
             state.cycle += 4;
         },
         0x89 => {
             op0(tracer, state, "ADC  C");
-            add_with_carry(cpu, cpu.c, cpu.flagY);
+            cpu.a = add_with_carry(cpu, cpu.c, cpu.flagY);
             state.cycle += 4;
         },
         0x8A => {
             op0(tracer, state, "ADC  D");
-            add_with_carry(cpu, cpu.d, cpu.flagY);
+            cpu.a = add_with_carry(cpu, cpu.d, cpu.flagY);
             state.cycle += 4;
         },
         0x8B => {
             op0(tracer, state, "ADC  E");
-            add_with_carry(cpu, cpu.e, cpu.flagY);
+            cpu.a = add_with_carry(cpu, cpu.e, cpu.flagY);
             state.cycle += 4;
         },
         0x8C => {
             op0(tracer, state, "ADC  H");
-            add_with_carry(cpu, hi(cpu.hl), cpu.flagY);
+            cpu.a = add_with_carry(cpu, hi(cpu.hl), cpu.flagY);
             state.cycle += 4;
         },
         0x8D => {
             op0(tracer, state, "ADC  L");
-            add_with_carry(cpu, lo(cpu.hl), cpu.flagY);
+            cpu.a = add_with_carry(cpu, lo(cpu.hl), cpu.flagY);
             state.cycle += 4;
         },
         0x8E => {
             op0(tracer, state, "ADC  (HL)");
-            add_with_carry(cpu, state.mem[cpu.hl], cpu.flagY);
+            cpu.a = add_with_carry(cpu, state.mem[cpu.hl], cpu.flagY);
             state.cycle += 7;
         },
         0x8F => {
             op0(tracer, state, "ADC  A");
-            add_with_carry(cpu, cpu.a, cpu.flagY);
+            cpu.a = add_with_carry(cpu, cpu.a, cpu.flagY);
             state.cycle += 4;
         },
         0x90 => {
             op0(tracer, state, "SUB  B");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.b, 0);
+            cpu.a = subtract_with_borrow(cpu, cpu.b, 0);
             state.cycle += 4;
         },
         0x91 => {
             op0(tracer, state, "SUB  C");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.c, 0);
+            cpu.a = subtract_with_borrow(cpu, cpu.c, 0);
             state.cycle += 4;
         },
         0x92 => {
             op0(tracer, state, "SUB  D");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.d, 0);
+            cpu.a = subtract_with_borrow(cpu, cpu.d, 0);
             state.cycle += 4;
         },
         0x93 => {
             op0(tracer, state, "SUB  E");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.e, 0);
+            cpu.a = subtract_with_borrow(cpu, cpu.e, 0);
             state.cycle += 4;
         },
         0x94 => {
             op0(tracer, state, "SUB  H");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, hi(cpu.hl), 0);
+            cpu.a = subtract_with_borrow(cpu, hi(cpu.hl), 0);
             state.cycle += 4;
         },
         0x95 => {
             op0(tracer, state, "SUB  L");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), 0);
+            cpu.a = subtract_with_borrow(cpu, lo(cpu.hl), 0);
             state.cycle += 4;
         },
         0x96 => {
             op0(tracer, state, "SUB  (HL)");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, state.mem[cpu.hl], 0);
+            cpu.a = subtract_with_borrow(cpu, state.mem[cpu.hl], 0);
             state.cycle += 7;
         },
         0x97 => {
             op0(tracer, state, "SUB  A");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.a, 0);
+            cpu.a = subtract_with_borrow(cpu, cpu.a, 0);
             state.cycle += 4;
         },
         0x98 => {
             op0(tracer, state, "SBC  B");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.b, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, cpu.b, cpu.flagY);
             state.cycle += 4;
         },
         0x99 => {
             op0(tracer, state, "SBC  C");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.c, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, cpu.c, cpu.flagY);
             state.cycle += 4;
         },
         0x9A => {
             op0(tracer, state, "SBC  D");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.d, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, cpu.d, cpu.flagY);
             state.cycle += 4;
         },
         0x9B => {
             op0(tracer, state, "SBC  E");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.e, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, cpu.e, cpu.flagY);
             state.cycle += 4;
         },
         0x9C => {
             op0(tracer, state, "SBC  H");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, hi(cpu.hl), cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, hi(cpu.hl), cpu.flagY);
             state.cycle += 4;
         },
         0x9D => {
             op0(tracer, state, "SBC  L");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, lo(cpu.hl), cpu.flagY);
             state.cycle += 4;
         },
         0x9E => {
             op0(tracer, state, "SBC  (HL)");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, state.mem[cpu.hl], cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, state.mem[cpu.hl], cpu.flagY);
             state.cycle += 7;
         },
         0x9F => {
             op0(tracer, state, "SBC  A");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.a, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, cpu.a, cpu.flagY);
             state.cycle += 4;
         },
         0xA0 => {
             op0(tracer, state, "AND  B");
-            const res = cpu.a & cpu.b;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, cpu.b);
             state.cycle += 4;
         },
         0xA1 => {
             op0(tracer, state, "AND  C");
-            const res = cpu.a & cpu.c;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, cpu.c);
             state.cycle += 4;
         },
         0xA2 => {
             op0(tracer, state, "AND  D");
-            const res = cpu.a & cpu.d;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, cpu.d);
             state.cycle += 4;
         },
         0xA3 => {
             op0(tracer, state, "AND  E");
-            const res = cpu.a & cpu.e;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, cpu.e);
             state.cycle += 4;
         },
         0xA4 => {
             op0(tracer, state, "AND  H");
-            const res = cpu.a & hi(cpu.hl);
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, hi(cpu.hl));
             state.cycle += 4;
         },
         0xA5 => {
             op0(tracer, state, "AND  L");
-            const res = cpu.a & lo(cpu.hl);
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, lo(cpu.hl));
             state.cycle += 4;
         },
         0xA6 => {
             op0(tracer, state, "AND  (HL)");
-            const res = cpu.a & state.mem[cpu.hl];
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, state.mem[cpu.hl]);
             state.cycle += 7;
         },
         0xA7 => {
             op0(tracer, state, "AND  A");
-            const res = cpu.a & cpu.a;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, cpu.a);
             state.cycle += 4;
         },
         0xA8 => {
@@ -914,6 +890,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xA9 => {
@@ -922,6 +899,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xAA => {
@@ -930,6 +908,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xAB => {
@@ -938,6 +917,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xAC => {
@@ -946,6 +926,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xAD => {
@@ -954,6 +935,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xAE => {
@@ -962,6 +944,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 7;
         },
         0xAF => {
@@ -970,6 +953,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB0 => {
@@ -978,6 +962,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB1 => {
@@ -986,6 +971,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB2 => {
@@ -994,6 +980,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB3 => {
@@ -1002,6 +989,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB4 => {
@@ -1010,6 +998,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB5 => {
@@ -1018,6 +1007,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB6 => {
@@ -1026,6 +1016,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 7;
         },
         0xB7 => {
@@ -1034,41 +1025,42 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 4;
         },
         0xB8 => {
             op0(tracer, state, "CP   B");
-            _ = subtract_with_borrow(cpu, cpu.a, cpu.b, 0);
+            _ = subtract_with_borrow(cpu, cpu.b, 0);
             state.cycle += 4;
         },
         0xB9 => {
             op0(tracer, state, "CP   C");
-            _ = subtract_with_borrow(cpu, cpu.a, cpu.c, 0);
+            _ = subtract_with_borrow(cpu, cpu.c, 0);
             state.cycle += 4;
         },
         0xBA => {
             op0(tracer, state, "CP   D");
-            _ = subtract_with_borrow(cpu, cpu.a, cpu.d, 0);
+            _ = subtract_with_borrow(cpu, cpu.d, 0);
             state.cycle += 4;
         },
         0xBB => {
             op0(tracer, state, "CP   E");
-            _ = subtract_with_borrow(cpu, cpu.a, cpu.e, 0);
+            _ = subtract_with_borrow(cpu, cpu.e, 0);
             state.cycle += 4;
         },
         0xBC => {
             op0(tracer, state, "CP   H");
-            _ = subtract_with_borrow(cpu, cpu.a, hi(cpu.hl), 0);
+            _ = subtract_with_borrow(cpu, hi(cpu.hl), 0);
             state.cycle += 4;
         },
         0xBD => {
             op0(tracer, state, "CP   L");
-            _ = subtract_with_borrow(cpu, cpu.a, lo(cpu.hl), 0);
+            _ = subtract_with_borrow(cpu, lo(cpu.hl), 0);
             state.cycle += 4;
         },
         0xBE => {
             op0(tracer, state, "CP   (HL)");
-            _ = subtract_with_borrow(cpu, cpu.a, state.mem[cpu.hl], 0);
+            _ = subtract_with_borrow(cpu, state.mem[cpu.hl], 0);
             state.cycle += 7;
         },
         0xC0 => {
@@ -1116,7 +1108,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xC6 => {
             const byte = op1(tracer, state, "ADD  ");
-            add_with_carry(cpu, byte, 0);
+            cpu.a = add_with_carry(cpu, byte, 0);
             state.cycle += 7;
         },
         0xC8 => {
@@ -1158,7 +1150,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xCE => {
             const byte = op1(tracer, state, "ADC  ");
-            add_with_carry(cpu, byte, cpu.flagY);
+            cpu.a = add_with_carry(cpu, byte, cpu.flagY);
             state.cycle += 7;
         },
         0xCF => {
@@ -1212,7 +1204,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xD6 => {
             const byte = op1(tracer, state, "SUB  ");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, byte, 0);
+            cpu.a = subtract_with_borrow(cpu, byte, 0);
             state.cycle += 7;
         },
         0xD7 => {
@@ -1254,7 +1246,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xDE => {
             const byte = op1(tracer, state, "SBC  ");
-            cpu.a = subtract_with_borrow(cpu, cpu.a, byte, cpu.flagY);
+            cpu.a = subtract_with_borrow(cpu, byte, cpu.flagY);
             state.cycle += 7;
         },
         0xE0 => {
@@ -1304,10 +1296,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xE6 => {
             const byte = op1(tracer, state, "AND  ");
-            const res = cpu.a & byte;
-            cpu.a = res;
-            setFlags(cpu, res);
-            cpu.flagY = 0;
+            ana(cpu, byte);
             state.cycle += 7;
         },
         0xE8 => {
@@ -1354,6 +1343,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 7;
         },
         0xF0 => {
@@ -1400,6 +1390,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
             cpu.a = res;
             setFlags(cpu, res);
             cpu.flagY = 0;
+            cpu.flagA = 0;
             state.cycle += 7;
         },
         0xF8 => {
@@ -1435,7 +1426,7 @@ fn step_ct_op(comptime tracer: Tracer, state: *State, comptime op: u8) void {
         },
         0xFE => {
             const byte = op1(tracer, state, "CP   ");
-            _ = subtract_with_borrow(cpu, cpu.a, byte, 0);
+            _ = subtract_with_borrow(cpu, byte, 0);
             state.cycle += 7;
         },
         else => {
@@ -1486,6 +1477,7 @@ pub const Cpu = struct {
     e: u8,
     flagS: u1,
     flagZ: u1,
+    flagA: u1,
     flagP: u1,
     flagY: u1,
     fn setBC(self: *Cpu, word: u16) void {
@@ -1506,6 +1498,7 @@ pub const Cpu = struct {
         var res: u8 = 0;
         if (self.flagS == 1) res += 0x80;
         if (self.flagZ == 1) res += 0x40;
+        if (self.flagA == 1) res += 0x10;
         if (self.flagP == 1) res += 0x04;
         if (self.flagY == 1) res += 0x01;
         return res;
@@ -1513,6 +1506,7 @@ pub const Cpu = struct {
     fn restoreFlags(self: *Cpu, byte: u8) void {
         self.flagS = if (byte & 0x80 == 0) 0 else 1;
         self.flagZ = if (byte & 0x40 == 0) 0 else 1;
+        self.flagA = if (byte & 0x10 == 0) 0 else 1;
         self.flagP = if (byte & 0x04 == 0) 0 else 1;
         self.flagY = if (byte & 0x01 == 0) 0 else 1;
     }
@@ -1527,6 +1521,7 @@ pub const Cpu = struct {
         .e = 0,
         .flagS = 0,
         .flagZ = 0,
+        .flagA = 0,
         .flagP = 0,
         .flagY = 0,
     };
@@ -1596,14 +1591,6 @@ fn fetch(state: *State) u8 {
     return op;
 }
 
-fn decrement(byte: u8) u8 {
-    return byte -% 1;
-}
-
-fn increment(byte: u8) u8 {
-    return byte +% 1;
-}
-
 fn setFlags(cpu: *Cpu, byte: u8) void {
     cpu.flagS = if (byte & 0x80 == 0) 0 else 1;
     cpu.flagP = parity(byte); //reduces speed-up approx x1700 to x1200
@@ -1665,32 +1652,52 @@ fn doIn(state: *State, channel: u8) u8 {
     }
 }
 
+fn ana(cpu: *Cpu, byte: u8) void {
+    const res = cpu.a & byte;
+    setFlags(cpu, res);
+    cpu.flagY = 0;
+    cpu.flagA = if (((cpu.a | byte) & 0x08) != 0) 1 else 0;
+    cpu.a = res;
+}
+
 fn dad(cpu: *Cpu, word: u16) void { // double add
     const res: u17 = @as(u17, cpu.hl) + @as(u17, word);
     cpu.hl = @truncate(res);
     cpu.flagY = @truncate(res >> 16);
 }
 
-fn add_with_carry(cpu: *Cpu, byte: u8, cin: u1) void {
-    const res: u9 = @as(u9, cpu.a) + @as(u9, byte) + cin;
+fn gen_add_with_carry(cpu: *Cpu, acc: u8, byte: u8, cin: u1) u8 {
+    const res: u9 = @as(u9, acc) + @as(u9, byte) + cin;
     const res_byte: u8 = @truncate(res);
-    cpu.a = res_byte;
     setFlags(cpu, res_byte);
     cpu.flagY = @truncate(res >> 8);
+    cpu.flagA =
+        if ((((cpu.a & 0xF) + (byte & 0xF) + cin) & 0x10) != 0) 1 else 0;
+    return res_byte;
 }
 
-fn subtract_with_borrow(cpu: *Cpu, a: u8, b0: u8, borrow: u1) u8 {
-    const b = b0 + borrow;
-    if (b > a) {
-        cpu.flagY = 1;
-        const xres = 256 + @as(u9, a) - @as(u9, b);
-        const res: u8 = @truncate(xres);
-        setFlags(cpu, res);
-        return res;
-    }
-    cpu.flagY = 0;
-    const xres = @as(u9, a - b);
-    const res: u8 = @truncate(xres);
-    setFlags(cpu, res);
+fn add_with_carry(cpu: *Cpu, byte: u8, cin: u1) u8 {
+    return gen_add_with_carry(cpu, cpu.a, byte, cin);
+}
+
+fn subtract_with_borrow(cpu: *Cpu, b0: u8, borrow: u1) u8 {
+    const res = add_with_carry(cpu, ~b0, ~borrow);
+    cpu.flagY = ~cpu.flagY;
+    return res;
+}
+
+fn decrement(cpu: *Cpu, byte: u8) u8 {
+    //return byte -% 1;
+    const keepY = cpu.flagY;
+    const res = gen_add_with_carry(cpu, byte, 0xFF, 0);
+    cpu.flagY = keepY;
+    return res;
+}
+
+fn increment(cpu: *Cpu, byte: u8) u8 {
+    //return byte +% 1;
+    const keepY = cpu.flagY;
+    const res = gen_add_with_carry(cpu, byte, 0x01, 0);
+    cpu.flagY = keepY;
     return res;
 }

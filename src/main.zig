@@ -55,8 +55,12 @@ fn load_roms(mem: []u8) !void {
     _ = try dir.readFile("invaders.e", mem[3 * rom_size ..]);
 }
 
-const c = @cImport({@cInclude("SDL2/SDL.h");});
-const mix = @cImport({@cInclude("SDL2/SDL_mixer.h");});
+const c = @cImport({
+    @cInclude("SDL2/SDL.h");
+});
+const mix = @cImport({
+    @cInclude("SDL2/SDL_mixer.h");
+});
 
 const render_scale = 3;
 
@@ -99,9 +103,7 @@ fn graphics_main(state: *machine.State) !void {
     const screen_w = render_scale * pixel_w;
     const screen_h = render_scale * pixel_h;
 
-    const screen = c.SDL_CreateWindow(
-        "Space Invaders",
-        500, //c.SDL_WINDOWPOS_UNDEFINED,
+    const screen = c.SDL_CreateWindow("Space Invaders", 500, //c.SDL_WINDOWPOS_UNDEFINED,
         50, //c.SDL_WINDOWPOS_UNDEFINED,
         screen_w, screen_h, c.SDL_WINDOW_OPENGL) orelse {
         c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
@@ -213,16 +215,16 @@ fn play(sound: Chunk) void {
 }
 
 const Sounds = struct {
-    ufo : Chunk,
-    shot : Chunk,
-    invader_die : Chunk,
-    player_die : Chunk,
-    extra_life : Chunk,
-    fleet1 : Chunk,
-    fleet2 : Chunk,
-    fleet3 : Chunk,
-    fleet4 : Chunk,
-    ufo_hit : Chunk,
+    ufo: Chunk,
+    shot: Chunk,
+    invader_die: Chunk,
+    player_die: Chunk,
+    extra_life: Chunk,
+    fleet1: Chunk,
+    fleet2: Chunk,
+    fleet3: Chunk,
+    fleet4: Chunk,
+    ufo_hit: Chunk,
 };
 
 fn init_sounds() Sounds {
@@ -231,8 +233,8 @@ fn init_sounds() Sounds {
     const format = mix.AUDIO_U16LSB;
     const channels = 1;
     const chunksize = 1024;
-    _ = mix.Mix_OpenAudio(frequency,format,channels,chunksize);
-    return Sounds {
+    _ = mix.Mix_OpenAudio(frequency, format, channels, chunksize);
+    return Sounds{
         .ufo = load_sound("sounds/Ufo.wav"),
         .shot = load_sound("sounds/Shot.wav"),
         .invader_die = load_sound("sounds/InvaderDie.wav"),
@@ -246,15 +248,14 @@ fn init_sounds() Sounds {
     };
 }
 
-fn load_sound(filename : [*c]const u8) Chunk {
+fn load_sound(filename: [*c]const u8) Chunk {
     const chunk = mix.Mix_LoadWAV(filename);
     if (chunk != 0) {
         return chunk;
     }
-    print("failed to load sound file: {s}\n",.{filename});
+    print("failed to load sound file: {s}\n", .{filename});
     unreachable; // TODO: use idomatic zig errors
 }
-
 
 fn null_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) void {
     _ = state;
@@ -349,7 +350,7 @@ fn test0() !void {
     mem[5] = 0xD3;
     mem[6] = 0x01;
     mem[7] = 0xC9;
-    const max_steps = 519; //DAD at 520
+    const max_steps = 519; //DAA at 520. DAA at 525 goes wrong
     trace_emulate(test0_tracer, &state, max_steps);
 }
 
@@ -361,7 +362,7 @@ fn test0_tracer(state: *machine.State, comptime fmt: []const u8, args: anytype) 
 
 fn printTraceLine0(state: *machine.State) void {
     const cpu = state.cpu;
-    print("PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}{c}{x}{x} {d:>7}  [{d:0>8}] {X:0>4} : ", .{
+    print("PC:{X:0>4} A:{X:0>2} B:{X:0>2} C:{X:0>2} D:{X:0>2} E:{X:0>2} HL:{X:0>4} SP:{X:0>4} SZAPY:{x}{x}{x}{x}{x} {d:>7}  [{d:0>8}] {X:0>4} : ", .{
         cpu.pc,
         cpu.a,
         //flags_byte(cpu),
@@ -373,7 +374,7 @@ fn printTraceLine0(state: *machine.State) void {
         cpu.sp,
         cpu.flagS,
         cpu.flagZ,
-        '?',
+        cpu.flagA,
         cpu.flagP,
         cpu.flagY,
         state.icount,
