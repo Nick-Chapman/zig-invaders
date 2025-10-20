@@ -77,6 +77,7 @@ pub fn step(comptime tracer: Tracer, state: *State) void {
         if (state.interrupts_enabled) {
             step_op(tracer, state, state.next_interrupt_op);
             state.icount += 1;
+            state.interrupts_enabled = false;
         }
         state.next_wakeup += half_frame_cycles;
         state.next_interrupt_op ^= flip_interrupt_op;
